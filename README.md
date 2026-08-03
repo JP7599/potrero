@@ -20,7 +20,8 @@ que decidir si pagas el curso de entrenador con lo que juntaste.
 
 ## Jugar
 
-Abre `docs/index.html`. No hay build, no hay servidor, no hay dependencias.
+**[jp7599.github.io/potrero](https://jp7599.github.io/potrero/)** — o abre
+`docs/index.html`. No hay build, no hay servidor, no hay dependencias.
 
 Eliges nombre, puesto y perfil (crack de barrio, obrero, cerebro, killer del
 área) y arrancas desde abajo del todo. A partir de ahí cada semana es una

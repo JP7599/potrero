@@ -9,7 +9,8 @@
  * automáticamente las pantallas que no te interesan, no simular distinto. Así
  * una carrera en Exprés y la misma en Intenso dan exactamente lo mismo. */
 (function () {
-  const D = window.PotreroData, E = window.PotreroEngine, C = window.PotreroCareer, K = window.PotreroCamisetas;
+  const D = window.PotreroData, E = window.PotreroEngine, C = window.PotreroCareer,
+        K = window.PotreroCamisetas, M = window.PotreroMomentos;
   const $ = (id) => document.getElementById(id);
   const esc = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const dinero = C.dinero;
@@ -72,6 +73,12 @@
   let s = null;
   let tab = "jugar";
   let saltadas = 0;
+  /* Los momentos de partido los escribe Claude: mientras llega la respuesta la
+   * pantalla espera, y si la llamada falla se dice por qué en vez de dejar la
+   * partida colgada a mitad del partido. */
+  const KEY_IA = "potrero.key";
+  const laKey = () => store.get(KEY_IA) || "";
+  let generando = false, errorIA = "";
   const nuevo = { pais: "pe", pos: "DC", perfil: "crack", ritmo: "normal" };
 
   /* =============================================================== arranque */
@@ -105,6 +112,7 @@
     const vistas = { jugar: vistaJugar, equipo: vistaEquipo, tabla: vistaTabla, carrera: vistaCarrera, mas: vistaMas };
     $("pantalla").innerHTML = (vistas[tab] || vistaJugar)();
     conectar();
+    pedirMomentoSiHaceFalta();
   }
 
   /* Los botones se cablean después de pintar: el HTML se arma como texto y
@@ -145,6 +153,38 @@
     $("nav").querySelector(".interior").innerHTML = TABS.map(([k, n, i]) =>
       `<button data-accion="tab" data-tab="${k}" class="${k === tab ? "on" : ""}">
         <span class="ico">${i}</span><span>${n}</span></button>`).join("");
+  }
+
+  function pedirMomentoSiHaceFalta() {
+    const pd = s && s.pendiente;
+    if (!pd || !pd.esperandoIA || generando || errorIA) return;
+    if (!laKey()) { errorIA = "sin-key"; return render(); }
+    generando = true;
+    M.pedir(pd.ctxIA, laKey())
+      .then((gen) => { generando = false; C.aplicarMomento(s, gen); guardar(); render(); })
+      .catch((e) => { generando = false; errorIA = String(e.message || e); render(); });
+  }
+
+  function vistaEsperandoIA() {
+    if (errorIA === "sin-key") {
+      return `<div class="card">
+        <h1>Falta tu API key</h1>
+        <p class="texto">Los momentos de partido los escribe Claude con lo que está pasando en este partido. Para eso necesitas una API key de Anthropic — se guarda solo en este navegador.</p>
+        </div>
+        <button class="btn primario" data-accion="tab" data-tab="mas">Ponerla en Más</button>`;
+    }
+    if (errorIA) {
+      return `<div class="card">
+        <h1>No llegó la jugada</h1>
+        <p class="texto">${esc(errorIA)}</p>
+        </div>
+        <button class="btn primario" data-accion="reintentar-ia">Reintentar</button>
+        <button class="btn" data-accion="saltar-ia">Seguir sin este momento<span class="sub">Se resuelve con una jugada del banco de siempre.</span></button>`;
+    }
+    return `<div class="card">
+      <h1>Minuto ${esc(s.pendiente.ctxIA.minuto)}</h1>
+      <p class="texto tenue">${esc(s.pendiente.ctxIA.marcador)} · escribiendo la jugada…</p>
+    </div>`;
   }
 
   /* ---------------------------------------------------------------- inicio */
@@ -192,6 +232,7 @@
     const pd = s.pendiente;
     if (!pd) return `<div class="card">…</div>`;
     if (pd.tipo === "fin") return vistaFin(pd);
+    if (pd.esperandoIA) return vistaEsperandoIA();
 
     let h = "";
     if (saltadas > 3) h += `<p class="tenue" style="font-size:13px;margin:12px 0 0">↓ Se resolvieron ${saltadas} pantallas de trámite.</p>`;
@@ -485,7 +526,21 @@
     const agente = dirige ? 0 : p.wage * me.agente.comision;
     const ritmo = ritmoActual();
 
-    let h = `<div class="card"><h2>Ritmo de la carrera</h2>` + RITMOS.map(([k, n, d]) =>
+    const key = laKey();
+    let h = `<div class="card"><h2>Momentos con IA</h2>
+      <p class="texto" style="font-size:14.5px">Las jugadas que te paran el partido las escribe Claude con lo que está pasando: el minuto, el marcador, el rival y cómo vienes tú. Por eso no se repiten.</p>
+      <label for="apikey">API key de Anthropic</label>
+      <input id="apikey" type="password" autocomplete="off" placeholder="${key ? "guardada · pega otra para cambiarla" : "sk-ant-…"}">
+      <p class="tenue" style="font-size:13px;margin:8px 0 12px">${key
+        ? `Guardada en este navegador (termina en ${esc(key.slice(-4))}). No sale de aquí salvo a api.anthropic.com.`
+        : "Se guarda solo en este navegador. El costo de la API corre por tu cuenta."}</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn chico" data-accion="guardar-key">Guardar</button>
+        ${key ? `<button class="btn chico" data-accion="borrar-key" style="color:var(--rojo)">Borrar</button>` : ""}
+      </div>
+    </div>`;
+
+    h += `<div class="card"><h2>Ritmo de la carrera</h2>` + RITMOS.map(([k, n, d]) =>
       `<button class="btn" data-accion="ritmo" data-ritmo="${k}"
         style="${k === ritmo ? "border-color:var(--verde);background:var(--verde-suave)" : ""}">${n}<span class="sub">${d}</span></button>`).join("") + `</div>`;
 
@@ -577,6 +632,15 @@
       };
       inp.click();
     },
+    "reintentar-ia": () => { errorIA = ""; render(); },
+    "saltar-ia": () => { errorIA = ""; paso(0); },
+    "guardar-key": () => {
+      const v = ($("apikey").value || "").trim();
+      if (v) store.set(KEY_IA, v); else store.del(KEY_IA);
+      $("apikey").value = "";
+      errorIA = ""; render();
+    },
+    "borrar-key": () => { store.del(KEY_IA); errorIA = ""; render(); },
     reiniciar: () => {
       if (s && !confirm("¿Empezar otra carrera? La de ahora se borra.")) return;
       store.del(KEY); s = null; tab = "jugar"; render();

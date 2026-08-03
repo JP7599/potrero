@@ -73,10 +73,22 @@ escándalo.
 
 **El partido.** Los minutos no te los regala nadie: dependen de tu media contra
 la de tus compañeros de puesto, de la confianza del técnico y de tu forma. Si
-entras, el partido te para una o dos veces y te hace elegir: el penal en el
-minuto 88, el mano a mano, el último hombre contra el delantero que se va solo.
-Cada opción muestra su probabilidad real calculada con tus atributos, y la
-panenka fallada te va a perseguir.
+entras, el partido te para una o dos veces y te hace elegir. Cada opción muestra
+su probabilidad real calculada con tus atributos, y la panenka fallada te va a
+perseguir.
+
+**Las jugadas las escribe Claude.** Los momentos de partido se generan con la
+API de Anthropic usando lo que está pasando de verdad: el minuto, el marcador,
+el rival, el torneo, tu puesto y cómo vienes en la temporada — más las últimas
+jugadas que ya te salieron, para que no se repitan. La división de trabajo es
+estricta: **el modelo escribe la ficción, el motor se queda con la matemática**.
+Las consecuencias son un enum cerrado (gol, amarilla, lesión, ánimo…) y las
+probabilidades salen de una tabla del juego, no de lo que se le ocurra al
+modelo, así que el balance no depende de la inspiración de nadie.
+
+Necesitas tu propia API key: se pega en Más → Momentos con IA y queda en el
+localStorage de tu navegador. No hay servidor de por medio y el costo corre por
+tu cuenta.
 
 **La plata.** Sueldo semanal escalado al nivel de cada liga (de $50 por semana
 en la Copa Perú a seis cifras en la élite), impuestos según el país, comisión
@@ -146,5 +158,5 @@ Los nombres de clubes y ciudades vienen de
 es de acá. `scripts/` tiene los generadores que arman `docs/mundo.js`, por si
 hay que rehacerlo.
 
-MIT. Sin dependencias, sin build, sin assets: seis archivos de JavaScript y un
+MIT. Sin dependencias, sin build, sin assets: siete archivos de JavaScript y un
 HTML.

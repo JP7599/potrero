@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url);
 const D = require("./docs/data.js");
 const E = require("./docs/engine.js");
 const C = require("./docs/career.js");
+const IA = require("./docs/momentos.js");
 
 let passed = 0, failed = 0;
 const ok = (c, n) => { if (c) { passed++; console.log(`  ok ${n}`); } else { failed++; console.error(`  FAIL ${n}`); } };
@@ -335,6 +336,87 @@ console.log("\nmomentos de partido");
   ok(C.probOpcion(p, op) > 0 && C.probOpcion(bueno, op) < 1, "nunca es imposible ni seguro");
   ok(D.MOMENTS.every((m) => m.opts.every((o) => o.ok || o.mal)), "todo momento tiene consecuencias declaradas");
   ok(D.EVENTOS.every((e) => e.opts.every((o) => o.txtRes)), "todo evento de vida se narra");
+}
+
+/* --------------------------------------------------- momentos escritos por IA */
+console.log("\nmomentos con IA: el modelo escribe, el motor decide");
+{
+  /* Lo que devolvería la API para una jugada. */
+  const bruto = {
+    texto: "Te queda el rebote en el área chica y el arquero ya salió.",
+    opciones: [
+      { txt: "Definir de primera", atributo: "tir", dificultad: "media",
+        bien: { txt: "La empujaste al fondo.", efecto: "gol" },
+        mal: { txt: "Le pegaste al cuerpo del arquero.", efecto: "confianza_abajo" } },
+      { txt: "Cederla al que entra libre", atributo: "pas", dificultad: "facil",
+        bien: { txt: "Se la dejaste servida.", efecto: "asistencia" },
+        mal: { txt: "El pase salió largo.", efecto: "nada" } },
+      { txt: "Aguantar la pelota", atributo: "ninguno", dificultad: "segura",
+        bien: { txt: "Ganaste el tiro de esquina.", efecto: "nada" },
+        mal: { txt: "Te la robaron.", efecto: "roja" } },
+    ],
+  };
+  const m = IA.normalizar(bruto);
+  ok(m.opts.length === 3, "se conservan las tres opciones");
+  ok(m.opts[0].key === "tir" && m.opts[1].key === "pas", "el atributo declarado llega al motor");
+  ok(m.opts[2].key === null, "«ninguno» significa que no depende de ningún atributo");
+  ok(m.opts[0].base === IA.DIFICULTAD.media, "la dificultad se traduce a probabilidad base");
+  ok(m.opts[0].ok.gol === 1 && m.opts[1].ok.asi === 1, "las consecuencias salen de la tabla del motor");
+  /* Lo importante: una opción declarada segura no puede terminar en roja. */
+  ok(!m.opts[2].mal.roja, "una opción segura no puede fallar, diga lo que diga el modelo");
+
+  /* Consecuencias inventadas o ausentes no rompen nada: caen en «nada». */
+  const raro = IA.normalizar({
+    texto: "x",
+    opciones: [
+      { txt: "a", atributo: "inventado", dificultad: "rarísima", bien: { txt: "", efecto: "teletransporte" }, mal: {} },
+      { txt: "b", atributo: "def", dificultad: "dificil", bien: { txt: "", efecto: "gol" }, mal: { txt: "", efecto: "roja" } },
+    ],
+  });
+  ok(raro.opts[0].key === null && raro.opts[0].base === 0.5, "un atributo o dificultad inválidos caen a valores neutros");
+  ok(Object.keys(raro.opts[0].ok).length === 1, "una consecuencia inventada no aplica ningún efecto");
+
+  let fallo = null;
+  try { IA.normalizar({ texto: "x", opciones: [{ txt: "una sola", atributo: "tir", dificultad: "media", bien: {}, mal: {} }] }); }
+  catch (e) { fallo = e; }
+  ok(fallo !== null, "una jugada con una sola opción se rechaza");
+}
+
+console.log("\nmomentos con IA: la llamada");
+{
+  /* fetch de mentira: verifica lo que se manda y devuelve lo que la API daría. */
+  let visto = null;
+  const fetchOk = async (url, opts) => {
+    visto = { url, ...JSON.parse(opts.body), headers: opts.headers };
+    return { ok: true, json: async () => ({
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: JSON.stringify({
+        texto: "Falta al borde del área.",
+        opciones: [
+          { txt: "Pegarle al ángulo", atributo: "tir", dificultad: "dificil", bien: { txt: "Golazo.", efecto: "gol" }, mal: { txt: "Afuera.", efecto: "nada" } },
+          { txt: "Ponerla al área", atributo: "pas", dificultad: "media", bien: { txt: "Cabezazo y gol.", efecto: "asistencia" }, mal: { txt: "Despejó el central.", efecto: "nada" } },
+        ],
+      }) }],
+    }) };
+  };
+  const hecho = await IA.pedir({ minuto: 70 }, "sk-ant-falsa", fetchOk);
+  ok(hecho.opts.length === 2 && hecho.opts[0].ok.gol === 1, "una respuesta válida se convierte en un momento jugable");
+  ok(visto.url === "https://api.anthropic.com/v1/messages", "pega contra la API de mensajes");
+  ok(visto.model === IA.MODELO, `usa ${IA.MODELO}`);
+  ok(visto.headers["anthropic-dangerous-direct-browser-access"] === "true", "manda la cabecera que el navegador necesita");
+  ok(visto.output_config.format.type === "json_schema", "pide salida estructurada, no texto libre");
+  ok(visto.headers["x-api-key"] === "sk-ant-falsa" && !JSON.stringify(visto.messages).includes("sk-ant"),
+     "la key va en la cabecera y nunca dentro del prompt");
+
+  const err = async () => ({ ok: false, status: 401, text: async () => "" });
+  let msg = "";
+  await IA.pedir({}, "x", err).catch((e) => { msg = e.message; });
+  ok(/API key/.test(msg), "un 401 se explica como key inválida, no como error genérico");
+
+  const refuse = async () => ({ ok: true, json: async () => ({ stop_reason: "refusal", content: [] }) });
+  msg = "";
+  await IA.pedir({}, "x", refuse).catch((e) => { msg = e.message; });
+  ok(/no quiso responder/.test(msg), "una negativa del modelo se maneja como tal y no revienta");
 }
 
 console.log(`\n${passed} ok, ${failed} fail`);

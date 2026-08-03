@@ -771,6 +771,29 @@
     else { s.cola.push(cerrarPartido(s)); }
   }
 
+  /* El contexto que se le manda a Claude para escribir el momento. Es el mismo
+   * que usan los momentos de toda la vida, más lo que hace que esta jugada sea
+   * esta y no otra: quién es el rival, qué torneo es, cómo venís vos. */
+  function contextoIA(s, min) {
+    const P = s.partido, p = yo(s), club = clubDe(s, p);
+    const rival = P.rival != null ? s.clubs[P.rival] : null;
+    const L = ligaDe(s, p.clubId);
+    return {
+      minuto: min,
+      marcador: `${club.name} ${P.golesMios} - ${P.golesRival} ${rival ? rival.name : "rival"}`,
+      vas: P.golesMios > P.golesRival ? "ganando" : P.golesMios < P.golesRival ? "perdiendo" : "empatando",
+      tuClub: club.name, rival: rival ? rival.name : "el rival",
+      competencia: P.t === "liga" ? L.name : P.t === "copa" ? L.cup : "copa internacional",
+      deLocal: !!P.local, clasico: !!P.clasico,
+      tuPuesto: D.POSITIONS[p.pos].name, tuNombre: p.name, tuEdad: p.age,
+      tuMedia: media(p), tusAtributos: p.attrs,
+      tuTemporada: `${p.st.pj} partidos, ${p.st.g} goles, ${p.st.a} asistencias`,
+      confianzaDelTecnico: Math.round(s.me.confianza),
+      /* Para que no repita lo que ya salió en esta carrera. */
+      evitar: (s.me.momentosVistos || []).slice(-8),
+    };
+  }
+
   function empujarMomento(s) {
     const P = s.partido, p = yo(s);
     const m = D.MOMENTS.find((x) => x.id === P.momentos[P.idx].id);
@@ -780,10 +803,31 @@
       min, pos: p.pos, local: P.local, clasico: P.clasico, jugando: true,
       marcadorTxt: dif > 0 ? `ganan ${P.golesMios}-${P.golesRival}` : dif < 0 ? `pierden ${P.golesMios}-${P.golesRival}` : `empatan ${P.golesMios}-${P.golesRival}`,
     };
+    const gen = P.momentos[P.idx].gen;
+    if (gen) {
+      s.cola.unshift({
+        tipo: "momento", titulo: `Minuto ${min}`, texto: gen.texto, momento: null,
+        opts: gen.opts.map((o) => ({ txt: o.txt, sub: probTxt(s, o) })),
+      });
+      return;
+    }
+    /* Sin momento escrito todavía: la interfaz lo pide y llama a aplicarMomento. */
     s.cola.unshift({
-      tipo: "momento", titulo: `Minuto ${min}`, texto: m.texto(ctx), momento: m.id,
-      opts: m.opts.map((o) => ({ txt: o.txt, sub: probTxt(s, o) })),
+      tipo: "momento", titulo: `Minuto ${min}`, texto: "", momento: m.id,
+      esperandoIA: true, ctxIA: contextoIA(s, min), opts: [],
     });
+    return;
+  }
+
+  /* La interfaz trae el momento ya escrito y validado: se guarda en el partido
+   * (para que resolverMomento lo use) y se reabre la pantalla. */
+  function aplicarMomento(s, gen) {
+    if (!s.partido || !s.partido.momentos[s.partido.idx]) return s.pendiente;
+    s.partido.momentos[s.partido.idx].gen = gen;
+    s.me.momentosVistos = (s.me.momentosVistos || []).concat(gen.texto).slice(-12);
+    s.pendiente = null;
+    empujarMomento(s);
+    return siguiente(s);
   }
 
   function probTxt(s, o) {
@@ -800,7 +844,8 @@
   function resolverMomento(s, i) {
     const { r, done } = rngDe(s);
     const P = s.partido, p = yo(s), me = s.me;
-    const m = D.MOMENTS.find((x) => x.id === P.momentos[P.idx].id);
+    const gen = P.momentos[P.idx].gen;
+    const m = gen || D.MOMENTS.find((x) => x.id === P.momentos[P.idx].id);
     const o = m.opts[i];
     const exito = r.chance(probOpcion(p, o));
     const ef = (exito ? o.ok : o.mal) || {};
@@ -1868,7 +1913,7 @@
   const Exported = {
     SEMANAS, W_LIGA, W_COPA, W_CONT, W_LIBRE, PERFILES,
     nuevaPartida, resolver, siguiente, tipoSemana, rivalDe, patrimonio, dinero,
-    gastarPunto, invertir, retirarInv, setEstilo, setTactica, setXI, autoXI,
+    gastarPunto, invertir, retirarInv, setEstilo, aplicarMomento, setTactica, setXI, autoXI,
     fuerzaDT, plantelDT, guardar, cargar, yo, clubDe, ligaDe, probOpcion, valueOf,
   };
   if (isNode) module.exports = Exported;

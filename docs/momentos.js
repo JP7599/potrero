@@ -46,6 +46,14 @@
   const ESQUEMA = {
     type: "object",
     additionalProperties: false,
+    required: ["jugadas"],
+    properties: {
+      jugadas: {
+        type: "array",
+        description: "Una entrada por cada minuto que te pido, en el mismo orden.",
+        items: {
+    type: "object",
+    additionalProperties: false,
     required: ["texto", "opciones"],
     properties: {
       texto: { type: "string", description: "La situación, en segunda persona, dos frases como máximo." },
@@ -78,11 +86,15 @@
         },
       },
     },
+        },
+      },
+    },
   };
 
   const SISTEMA = `Escribes los momentos de un juego de modo carrera de fútbol.
 
-Te doy el contexto real de un partido y devuelves UNA situación con sus opciones.
+Te doy el contexto real de un partido y devuelves las situaciones que lo van a
+parar, una por cada minuto que te pido.
 
 Voz: español peruano, tuteo, segunda persona ("te queda el rebote", "el central
 te vio venir"). Directo y con calle, sin floro ni épica de relator. Nada de
@@ -98,7 +110,16 @@ Reglas:
 - No repitas las situaciones que te paso en "evitar": ya salieron y aburren.
 - Un portero no cabecea al área rival y un central no define de zurda al ángulo:
   respeta el puesto.
-- Sin markdown, sin comillas decorativas, sin emojis.`;
+- Sin markdown, sin comillas decorativas, sin emojis.
+
+Te pido varias jugadas de un mismo partido y las escribes como una secuencia:
+la segunda pasa después de la primera y el partido ya avanzó.
+
+Sobre el minuto y el marcador:
+- No escribas el número del minuto en el texto: la pantalla ya lo muestra arriba.
+- Si te paso un marcador, es el de antes de estas jugadas y puede cambiar. Úsalo
+  para el clima del partido, no como un dato fijo ("vienen abajo y hay que ir a
+  buscarlo" sí; "van 1-0" no).`;
 
   /* ------------------------------------------------------------- la llamada */
   async function pedir(ctx, key, fetchImpl) {
@@ -132,7 +153,8 @@ Reglas:
     if (data.stop_reason === "refusal") throw new Error("El modelo no quiso responder a esta jugada.");
     const bloque = (data.content || []).find((b) => b.type === "text");
     if (!bloque) throw new Error("La respuesta vino vacía.");
-    return normalizar(JSON.parse(bloque.text));
+    const bruto = JSON.parse(bloque.text);
+    return (bruto.jugadas || []).map(normalizar);
   }
 
   function mensajeDeError(status, cuerpo) {
@@ -154,7 +176,7 @@ Reglas:
       ok: efecto(o.bien),
       mal: efecto(o.mal),
     }));
-    if (opciones.length < 2) throw new Error("El modelo devolvió menos de dos opciones.");
+    if (opciones.length < 2) throw new Error("El modelo devolvió una jugada con menos de dos opciones.");
     /* Una opción "segura" no puede fallar: si el modelo le puso consecuencia
      * mala, se ignora, porque el motor nunca va a tirar el dado. */
     for (const o of opciones) if (o.base >= 1) o.mal = { txt: "", ...EFECTOS.nada };

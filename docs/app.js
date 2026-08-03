@@ -79,6 +79,15 @@
   const KEY_IA = "potrero.key";
   const laKey = () => store.get(KEY_IA) || "";
   let generando = false, errorIA = "";
+  /* Las jugadas de un partido se piden todas juntas mientras miras la previa,
+   * que es lo que hace que después no esperes nada. */
+  /* Cola de partidos ya pedidos. Generar tarda más de lo que tardas en jugar una
+   * semana, así que se van pidiendo varios por delante: cuando llega el partido
+   * la jugada ya está escrita y no esperas nada. */
+  const cola = [];
+  /* Una sola petición en vuelo: medido, tres en paralelo se estorban entre sí y
+   * la espera sube de 12s a 17s. */
+  const EN_VUELO = 1;
   const nuevo = { pais: "pe", pos: "DC", perfil: "crack", ritmo: "normal" };
 
   /* =============================================================== arranque */
@@ -97,10 +106,40 @@
     const ritmo = ritmoActual();
     saltadas = 0;
     for (let n = 0; n < 600; n++) {
-      if (!s || !s.pendiente || paraAca(s.pendiente, ritmo)) break;
+      if (!s || !s.pendiente) break;
+      /* Aunque la pantalla se salte por el ritmo, si trae contexto de partido
+       * hay que arrancar la petición igual: es el único aviso anticipado que
+       * da el motor de que en un rato va a haber una jugada. */
+      quizasPrecargar(s.pendiente);
+      if (paraAca(s.pendiente, ritmo)) break;
       C.resolver(s, eleccionAuto(s.pendiente));
       saltadas++;
     }
+  }
+
+  function encolar(ctx) {
+    if (!ctx || !laKey() || cola.some((c) => c.rival === ctx.rival)) return;
+    const entrada = { rival: ctx.rival, promesa: M.pedir(ctx, laKey()) };
+    entrada.promesa.catch(() => {});   // el error se maneja al consumirla
+    cola.push(entrada);
+  }
+  let ultimoCtx = null;
+  function quizasPrecargar(pd) { if (pd && pd.ctxIA) { ultimoCtx = pd.ctxIA; encolar(pd.ctxIA); } }
+
+  /* El calendario ya está sorteado desde el arranque de temporada, así que se
+   * piden varios partidos por delante y la cola siempre va ganando. */
+  function precargarProximos() {
+    if (!s || !laKey() || cola.length >= EN_VUELO) return;
+    for (const ctx of C.proximosPartidos(s, EN_VUELO)) {
+      if (cola.length >= EN_VUELO) break;
+      encolar(ctx);
+    }
+  }
+  /* Saca de la cola la precarga de este rival; si no está, pide una ahora. */
+  function tomarDeLaCola(ctx) {
+    const i = cola.findIndex((c) => c.rival === (ctx && ctx.rival));
+    if (i >= 0) return cola.splice(i, 1)[0].promesa;
+    return M.pedir(ctx || {}, laKey());
   }
 
   /* ================================================================= pintar */
@@ -113,6 +152,7 @@
     $("pantalla").innerHTML = (vistas[tab] || vistaJugar)();
     conectar();
     pedirMomentoSiHaceFalta();
+    precargarProximos();
   }
 
   /* Los botones se cablean después de pintar: el HTML se arma como texto y
@@ -155,12 +195,17 @@
         <span class="ico">${i}</span><span>${n}</span></button>`).join("");
   }
 
+  /* En la previa se dispara la petición y se guarda la promesa; en el momento
+   * se espera esa misma promesa en vez de empezar de cero. */
   function pedirMomentoSiHaceFalta() {
     const pd = s && s.pendiente;
-    if (!pd || !pd.esperandoIA || generando || errorIA) return;
+    if (!pd || generando || errorIA) return;
+    if (pd.ctxIA) { quizasPrecargar(pd); return; }
+    if (!pd.esperandoIA) return;
     if (!laKey()) { errorIA = "sin-key"; return render(); }
     generando = true;
-    M.pedir(pd.ctxIA, laKey())
+    const promesa = tomarDeLaCola(pd.ctxIA || ultimoCtx);
+    promesa
       .then((gen) => { generando = false; C.aplicarMomento(s, gen); guardar(); render(); })
       .catch((e) => { generando = false; errorIA = String(e.message || e); render(); });
   }
@@ -182,8 +227,8 @@
         <button class="btn" data-accion="saltar-ia">Seguir sin este momento<span class="sub">Se resuelve con una jugada del banco de siempre.</span></button>`;
     }
     return `<div class="card">
-      <h1>Minuto ${esc(s.pendiente.ctxIA.minuto)}</h1>
-      <p class="texto tenue">${esc(s.pendiente.ctxIA.marcador)} · escribiendo la jugada…</p>
+      <h1>${esc(s.pendiente.titulo || "El partido")}</h1>
+      <p class="texto tenue">Escribiendo la jugada…</p>
     </div>`;
   }
 
@@ -233,6 +278,7 @@
     if (!pd) return `<div class="card">…</div>`;
     if (pd.tipo === "fin") return vistaFin(pd);
     if (pd.esperandoIA) return vistaEsperandoIA();
+    if (pd.tipo === "previa") return vistaPrevia(pd);
 
     let h = "";
     if (saltadas > 3) h += `<p class="tenue" style="font-size:13px;margin:12px 0 0">↓ Se resolvieron ${saltadas} pantallas de trámite.</p>`;
@@ -258,6 +304,21 @@
         `</div>`;
     }
     return h;
+  }
+
+  /* Previa: quién, dónde y qué se juega. Ocupa los segundos que Claude tarda
+   * en escribir las jugadas del partido. */
+  function vistaPrevia(pd) {
+    const M2 = pd.marcador, mio = s.clubs[M2.clubId], otro = M2.rivalId != null ? s.clubs[M2.rivalId] : null;
+    const izq = M2.local ? mio : otro, der = M2.local ? otro : mio;
+    const lado = (c) => `<div class="lado">${c ? camiseta(c, "grande") : ""}
+      <div class="nom">${esc(c ? c.name : "Rival")}</div></div>`;
+    return `<div class="card">
+        <div class="marcador">${lado(izq)}<div class="vs">vs</div>${lado(der)}</div>
+        <h1 style="text-align:center;font-size:19px">${esc(pd.titulo)}</h1>
+        <p class="tenue" style="text-align:center;font-size:13.5px;margin:0">${esc(pd.texto)} ${M2.local ? "En tu cancha." : "De visita."}</p>
+      </div>
+      <button class="btn primario" data-op="0">Salir a la cancha</button>`;
   }
 
   function marcadorHTML(pd) {

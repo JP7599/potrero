@@ -356,7 +356,7 @@ console.log("\nmomentos con IA: el modelo escribe, el motor decide");
         mal: { txt: "Te la robaron.", efecto: "roja" } },
     ],
   };
-  const m = IA.normalizar(bruto);
+  const m = IA.normalizar(bruto);   // una jugada suelta
   ok(m.opts.length === 3, "se conservan las tres opciones");
   ok(m.opts[0].key === "tir" && m.opts[1].key === "pas", "el atributo declarado llega al motor");
   ok(m.opts[2].key === null, "«ninguno» significa que no depende de ningún atributo");
@@ -390,17 +390,19 @@ console.log("\nmomentos con IA: la llamada");
     visto = { url, ...JSON.parse(opts.body), headers: opts.headers };
     return { ok: true, json: async () => ({
       stop_reason: "end_turn",
-      content: [{ type: "text", text: JSON.stringify({
+      content: [{ type: "text", text: JSON.stringify({ jugadas: [{
         texto: "Falta al borde del área.",
         opciones: [
           { txt: "Pegarle al ángulo", atributo: "tir", dificultad: "dificil", bien: { txt: "Golazo.", efecto: "gol" }, mal: { txt: "Afuera.", efecto: "nada" } },
           { txt: "Ponerla al área", atributo: "pas", dificultad: "media", bien: { txt: "Cabezazo y gol.", efecto: "asistencia" }, mal: { txt: "Despejó el central.", efecto: "nada" } },
         ],
-      }) }],
+      }] }) }],
     }) };
   };
-  const hecho = await IA.pedir({ minuto: 70 }, "sk-ant-falsa", fetchOk);
-  ok(hecho.opts.length === 2 && hecho.opts[0].ok.gol === 1, "una respuesta válida se convierte en un momento jugable");
+  const hecho = await IA.pedir({ minutos: [70] }, "sk-ant-falsa", fetchOk);
+  ok(hecho.length === 1 && hecho[0].opts.length === 2 && hecho[0].ok === undefined,
+     "la respuesta llega como lista de jugadas del partido");
+  ok(hecho[0].opts[0].ok.gol === 1, "y cada jugada ya viene traducida a efectos del motor");
   ok(visto.url === "https://api.anthropic.com/v1/messages", "pega contra la API de mensajes");
   ok(visto.model === IA.MODELO, `usa ${IA.MODELO}`);
   ok(visto.headers["anthropic-dangerous-direct-browser-access"] === "true", "manda la cabecera que el navegador necesita");

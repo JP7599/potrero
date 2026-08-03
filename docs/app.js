@@ -10,7 +10,7 @@
  * una carrera en Exprés y la misma en Intenso dan exactamente lo mismo. */
 (function () {
   const D = window.PotreroData, E = window.PotreroEngine, C = window.PotreroCareer,
-        K = window.PotreroCamisetas, M = window.PotreroMomentos;
+        K = window.PotreroCamisetas;
   const $ = (id) => document.getElementById(id);
   const esc = (t) => String(t == null ? "" : t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const dinero = C.dinero;
@@ -73,21 +73,6 @@
   let s = null;
   let tab = "jugar";
   let saltadas = 0;
-  /* Los momentos de partido los escribe Claude: mientras llega la respuesta la
-   * pantalla espera, y si la llamada falla se dice por qué en vez de dejar la
-   * partida colgada a mitad del partido. */
-  const KEY_IA = "potrero.key";
-  const laKey = () => store.get(KEY_IA) || "";
-  let generando = false, errorIA = "";
-  /* Las jugadas de un partido se piden todas juntas mientras miras la previa,
-   * que es lo que hace que después no esperes nada. */
-  /* Cola de partidos ya pedidos. Generar tarda más de lo que tardas en jugar una
-   * semana, así que se van pidiendo varios por delante: cuando llega el partido
-   * la jugada ya está escrita y no esperas nada. */
-  const cola = [];
-  /* Una sola petición en vuelo: medido, tres en paralelo se estorban entre sí y
-   * la espera sube de 12s a 17s. */
-  const EN_VUELO = 1;
   const nuevo = { pais: "pe", pos: "DC", perfil: "crack", ritmo: "normal" };
 
   /* =============================================================== arranque */
@@ -107,129 +92,10 @@
     saltadas = 0;
     for (let n = 0; n < 600; n++) {
       if (!s || !s.pendiente) break;
-      /* Aunque la pantalla se salte por el ritmo, si trae contexto de partido
-       * hay que arrancar la petición igual: es el único aviso anticipado que
-       * da el motor de que en un rato va a haber una jugada. */
-      quizasPrecargar(s.pendiente);
       if (paraAca(s.pendiente, ritmo)) break;
       C.resolver(s, eleccionAuto(s.pendiente));
       saltadas++;
     }
-  }
-
-  function encolar(ctx) {
-    if (!ctx || !laKey() || cola.some((c) => c.rival === ctx.rival)) return;
-    const entrada = { rival: ctx.rival, promesa: M.pedir(ctx, laKey()) };
-    entrada.promesa.catch(() => {});   // el error se maneja al consumirla
-    cola.push(entrada);
-  }
-  let ultimoCtx = null;
-  function quizasPrecargar(pd) { if (pd && pd.ctxIA) { ultimoCtx = pd.ctxIA; encolar(pd.ctxIA); } }
-
-  /* El calendario ya está sorteado desde el arranque de temporada, así que se
-   * piden varios partidos por delante y la cola siempre va ganando. */
-  function precargarProximos() {
-    if (!s || !laKey() || cola.length >= EN_VUELO) return;
-    for (const ctx of C.proximosPartidos(s, EN_VUELO)) {
-      if (cola.length >= EN_VUELO) break;
-      encolar(ctx);
-    }
-  }
-  /* Saca de la cola la precarga de este rival; si no está, pide una ahora. */
-  function tomarDeLaCola(ctx) {
-    const i = cola.findIndex((c) => c.rival === (ctx && ctx.rival));
-    if (i >= 0) return cola.splice(i, 1)[0].promesa;
-    return M.pedir(ctx || {}, laKey());
-  }
-
-  /* ================================================================= pintar */
-  function render() {
-    if (!s) { $("top").hidden = true; $("nav").hidden = true; return pantallaInicio(); }
-    $("top").hidden = false; $("nav").hidden = false;
-    pintarTop();
-    pintarNav();
-    const vistas = { jugar: vistaJugar, equipo: vistaEquipo, tabla: vistaTabla, carrera: vistaCarrera, mas: vistaMas };
-    $("pantalla").innerHTML = (vistas[tab] || vistaJugar)();
-    conectar();
-    pedirMomentoSiHaceFalta();
-    precargarProximos();
-  }
-
-  /* Los botones se cablean después de pintar: el HTML se arma como texto y
-   * acá se le engancha el comportamiento por data-* */
-  function conectar() {
-    document.querySelectorAll("[data-op]").forEach((b) => { b.onclick = () => paso(+b.dataset.op); });
-    document.querySelectorAll("[data-accion]").forEach((b) => { b.onclick = () => ACCIONES[b.dataset.accion](b); });
-  }
-
-  function pintarTop() {
-    const p = C.yo(s), dirige = s.fase === "dt" && s.dt;
-    const club = s.clubs[dirige ? s.dt.clubId : p.clubId];
-    const L = liga(club.leagueId);
-    const t = C.tipoSemana(s);
-    const NOMBRE = { pretemporada: "Pretemporada", liga: "Fecha de liga", copa: "Copa", cont: "Copa internacional",
-      libre: "Semana libre", premios: "Premios", mercado: "Mercado de pases", seleccion: "Selección", vacaciones: "Vacaciones" };
-    $("top").innerHTML = `
-      <div class="fila">
-        ${camiseta(club)}
-        <div class="quien">
-          <div class="club">${esc(club.name)}</div>
-          <div class="liga">${dirige ? "DT · " : ""}${esc(L ? L.name : "")}</div>
-        </div>
-        <div class="plata">${dinero(C.patrimonio(s))}</div>
-      </div>
-      <div class="barra-temp"><i style="width:${(s.semana / C.SEMANAS) * 100}%"></i></div>
-      <div class="semana">
-        <span>Temporada ${s.temporada} · ${s.anio}</span>
-        <span>${esc(NOMBRE[t] || "")} · sem ${s.semana}/${C.SEMANAS}</span>
-      </div>`;
-  }
-
-  const TABS = [
-    ["jugar", "Jugar", "▶"], ["equipo", "Equipo", "👥"], ["tabla", "Tabla", "☰"],
-    ["carrera", "Carrera", "★"], ["mas", "Más", "⚙"],
-  ];
-  function pintarNav() {
-    $("nav").querySelector(".interior").innerHTML = TABS.map(([k, n, i]) =>
-      `<button data-accion="tab" data-tab="${k}" class="${k === tab ? "on" : ""}">
-        <span class="ico">${i}</span><span>${n}</span></button>`).join("");
-  }
-
-  /* En la previa se dispara la petición y se guarda la promesa; en el momento
-   * se espera esa misma promesa en vez de empezar de cero. */
-  function pedirMomentoSiHaceFalta() {
-    const pd = s && s.pendiente;
-    if (!pd || generando || errorIA) return;
-    if (pd.ctxIA) { quizasPrecargar(pd); return; }
-    if (!pd.esperandoIA) return;
-    if (!laKey()) { errorIA = "sin-key"; return render(); }
-    generando = true;
-    const promesa = tomarDeLaCola(pd.ctxIA || ultimoCtx);
-    promesa
-      .then((gen) => { generando = false; C.aplicarMomento(s, gen); guardar(); render(); })
-      .catch((e) => { generando = false; errorIA = String(e.message || e); render(); });
-  }
-
-  function vistaEsperandoIA() {
-    if (errorIA === "sin-key") {
-      return `<div class="card">
-        <h1>Falta tu API key</h1>
-        <p class="texto">Los momentos de partido los escribe Claude con lo que está pasando en este partido. Para eso necesitas una API key de Anthropic — se guarda solo en este navegador.</p>
-        </div>
-        <button class="btn primario" data-accion="tab" data-tab="mas">Ponerla en Más</button>`;
-    }
-    if (errorIA) {
-      return `<div class="card">
-        <h1>No llegó la jugada</h1>
-        <p class="texto">${esc(errorIA)}</p>
-        </div>
-        <button class="btn primario" data-accion="reintentar-ia">Reintentar</button>
-        <button class="btn" data-accion="saltar-ia">Seguir sin este momento<span class="sub">Se resuelve con una jugada del banco de siempre.</span></button>`;
-    }
-    return `<div class="card">
-      <h1>${esc(s.pendiente.titulo || "El partido")}</h1>
-      <p class="texto tenue">Escribiendo la jugada…</p>
-    </div>`;
   }
 
   /* ---------------------------------------------------------------- inicio */
@@ -277,7 +143,6 @@
     const pd = s.pendiente;
     if (!pd) return `<div class="card">…</div>`;
     if (pd.tipo === "fin") return vistaFin(pd);
-    if (pd.esperandoIA) return vistaEsperandoIA();
     if (pd.tipo === "previa") return vistaPrevia(pd);
 
     let h = "";
@@ -587,21 +452,7 @@
     const agente = dirige ? 0 : p.wage * me.agente.comision;
     const ritmo = ritmoActual();
 
-    const key = laKey();
-    let h = `<div class="card"><h2>Momentos con IA</h2>
-      <p class="texto" style="font-size:14.5px">Las jugadas que te paran el partido las escribe Claude con lo que está pasando: el minuto, el marcador, el rival y cómo vienes tú. Por eso no se repiten.</p>
-      <label for="apikey">API key de Anthropic</label>
-      <input id="apikey" type="password" autocomplete="off" placeholder="${key ? "guardada · pega otra para cambiarla" : "sk-ant-…"}">
-      <p class="tenue" style="font-size:13px;margin:8px 0 12px">${key
-        ? `Guardada en este navegador (termina en ${esc(key.slice(-4))}). No sale de aquí salvo a api.anthropic.com.`
-        : "Se guarda solo en este navegador. El costo de la API corre por tu cuenta."}</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn chico" data-accion="guardar-key">Guardar</button>
-        ${key ? `<button class="btn chico" data-accion="borrar-key" style="color:var(--rojo)">Borrar</button>` : ""}
-      </div>
-    </div>`;
-
-    h += `<div class="card"><h2>Ritmo de la carrera</h2>` + RITMOS.map(([k, n, d]) =>
+    let h = `<div class="card"><h2>Ritmo de la carrera</h2>` + RITMOS.map(([k, n, d]) =>
       `<button class="btn" data-accion="ritmo" data-ritmo="${k}"
         style="${k === ritmo ? "border-color:var(--verde);background:var(--verde-suave)" : ""}">${n}<span class="sub">${d}</span></button>`).join("") + `</div>`;
 
@@ -693,15 +544,6 @@
       };
       inp.click();
     },
-    "reintentar-ia": () => { errorIA = ""; render(); },
-    "saltar-ia": () => { errorIA = ""; paso(0); },
-    "guardar-key": () => {
-      const v = ($("apikey").value || "").trim();
-      if (v) store.set(KEY_IA, v); else store.del(KEY_IA);
-      $("apikey").value = "";
-      errorIA = ""; render();
-    },
-    "borrar-key": () => { store.del(KEY_IA); errorIA = ""; render(); },
     reiniciar: () => {
       if (s && !confirm("¿Empezar otra carrera? La de ahora se borra.")) return;
       store.del(KEY); s = null; tab = "jugar"; render();

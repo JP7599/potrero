@@ -382,35 +382,6 @@
   }
   function tipoSemana(s) { return tipoDeSemana(s.semana); }
 
-  /* Con quién juegas la próxima fecha de liga. El calendario ya está sorteado
-   * desde el arranque de la temporada, así que se puede mirar adelante — y eso
-   * es lo que le da a la interfaz el minuto largo que necesita para pedirle las
-   * jugadas a Claude sin que después esperes mirando una pantalla vacía.
-   * Solo liga: copa e internacional son llaves y el rival aún no está definido. */
-  function proximosPartidos(s, cuantos) {
-    if (s.fase !== "jugador" || s.me.cantera || !s.comp) return [];
-    const p = yo(s);
-    if (!p || p.inj) return [];
-    const club = clubDe(s, p), L = s.comp.ligas[club.leagueId];
-    if (!L) return [];
-    const fuera = [];
-    let salto = tipoDeSemana(s.semana) === "liga" ? 1 : 0;
-    for (let k = 1; k <= 30 && fuera.length < (cuantos || 1); k++) {
-      const w = s.semana + k;
-      if (w > SEMANAS) break;
-      if (tipoDeSemana(w) !== "liga") continue;
-      const fecha = L.fixtures[L.fecha + salto];
-      salto++;
-      if (!fecha) continue;
-      for (const [h, a] of fecha) {
-        if (h === club.id) fuera.push(contextoPrevio(s, "liga", { rival: a, local: true }));
-        else if (a === club.id) fuera.push(contextoPrevio(s, "liga", { rival: h, local: false }));
-      }
-    }
-    return fuera;
-  }
-  const proximoPartido = (s, adelanto) => proximosPartidos(s, 1)[0] || null;
-
   function arrancarSemana(s) {
     s.necesitaCierre = true;
     if (s.fase === "dt") return arrancarSemanaDT(s);
@@ -419,14 +390,7 @@
     if (t === "mercado") { mercado(s); return null; }
     if (t === "seleccion") { seleccion(s); return null; }
     if (t === "vacaciones") { cerrarTemporada(s); return null; }
-    /* Si esta semana hay partido, la pantalla lleva el contexto para que la
-     * interfaz vaya pidiéndole las jugadas a Claude mientras eliges entreno:
-     * son diez o quince segundos que después no esperas. */
     const pd = { tipo: "accion", titulo: tituloSemana(s, t), texto: subtituloSemana(s, t), opts: accionesDisponibles(s) };
-    if (["liga", "copa", "cont"].includes(t) && !s.me.cantera && !yo(s).inj) {
-      const info = rivalDe(s, t);
-      if (info) pd.ctxIA = contextoPrevio(s, t, info);
-    }
     return pd;
   }
 
@@ -814,52 +778,10 @@
         titulo: rival ? (P.local ? `Recibes a ${rival.name}` : `Visitas a ${rival.name}`) : "Se juega",
         texto: `${P.t === "liga" ? ligaDe(s, club.id).name : P.t === "copa" ? ligaDe(s, club.id).cup : "Copa internacional"}${P.clasico ? " · clásico" : ""}.`,
         marcador: { clubId: club.id, rivalId: P.rival, local: !!P.local },
-        ctxIA: contextoIA(s, s.partido.momentos.map((m) => m.min)),
         opts: [{ txt: "Salir a la cancha" }],
       });
       empujarMomento(s);
     } else { s.cola.push(cerrarPartido(s)); }
-  }
-
-  /* El contexto que se le manda a Claude para escribir el momento. Es el mismo
-   * que usan los momentos de toda la vida, más lo que hace que esta jugada sea
-   * esta y no otra: quién es el rival, qué torneo es, cómo venís vos. */
-  /* Antes de que arranque el partido no hay minuto ni marcador todavía, pero sí
-   * está todo lo demás: contra quién, dónde y cómo llegas vos. Alcanza para que
-   * las jugadas se escriban mientras tanto. */
-  function contextoPrevio(s, t, info) {
-    const p = yo(s), club = clubDe(s, p), rival = s.clubs[info.rival], L = ligaDe(s, p.clubId);
-    return {
-      jugadasQuePido: 2,
-      tuClub: club.name, rival: rival.name,
-      competencia: t === "liga" ? L.name : t === "copa" ? L.cup : "copa internacional",
-      deLocal: !!info.local, clasico: club.city && club.city === rival.city,
-      tuPuesto: D.POSITIONS[p.pos].name, tuNombre: p.name, tuEdad: p.age,
-      tuMedia: media(p), tusAtributos: p.attrs,
-      tuTemporada: `${p.st.pj} partidos, ${p.st.g} goles, ${p.st.a} asistencias`,
-      confianzaDelTecnico: Math.round(s.me.confianza),
-      evitar: (s.me.momentosVistos || []).slice(-8),
-    };
-  }
-
-  function contextoIA(s, minutos) {
-    const P = s.partido, p = yo(s), club = clubDe(s, p);
-    const rival = P.rival != null ? s.clubs[P.rival] : null;
-    const L = ligaDe(s, p.clubId);
-    return {
-      minutos: Array.isArray(minutos) ? minutos : [minutos],
-      marcador: `${club.name} ${P.golesMios} - ${P.golesRival} ${rival ? rival.name : "rival"}`,
-      vas: P.golesMios > P.golesRival ? "ganando" : P.golesMios < P.golesRival ? "perdiendo" : "empatando",
-      tuClub: club.name, rival: rival ? rival.name : "el rival",
-      competencia: P.t === "liga" ? L.name : P.t === "copa" ? L.cup : "copa internacional",
-      deLocal: !!P.local, clasico: !!P.clasico,
-      tuPuesto: D.POSITIONS[p.pos].name, tuNombre: p.name, tuEdad: p.age,
-      tuMedia: media(p), tusAtributos: p.attrs,
-      tuTemporada: `${p.st.pj} partidos, ${p.st.g} goles, ${p.st.a} asistencias`,
-      confianzaDelTecnico: Math.round(s.me.confianza),
-      /* Para que no repita lo que ya salió en esta carrera. */
-      evitar: (s.me.momentosVistos || []).slice(-8),
-    };
   }
 
   function empujarMomento(s) {
@@ -871,35 +793,10 @@
       min, pos: p.pos, local: P.local, clasico: P.clasico, jugando: true,
       marcadorTxt: dif > 0 ? `ganan ${P.golesMios}-${P.golesRival}` : dif < 0 ? `pierden ${P.golesMios}-${P.golesRival}` : `empatan ${P.golesMios}-${P.golesRival}`,
     };
-    const gen = P.momentos[P.idx].gen;
-    if (gen) {
-      s.cola.unshift({
-        tipo: "momento", titulo: `Minuto ${min}`, texto: gen.texto, momento: null,
-        opts: gen.opts.map((o) => ({ txt: o.txt, sub: probTxt(s, o) })),
-      });
-      return;
-    }
-    /* Sin momento escrito todavía: la interfaz lo pide y llama a aplicarMomento. */
     s.cola.unshift({
-      tipo: "momento", titulo: `Minuto ${min}`, texto: "", momento: m.id,
-      esperandoIA: true, opts: [],
+      tipo: "momento", titulo: `Minuto ${min}`, texto: m.texto(ctx), momento: m.id,
+      opts: m.opts.map((o) => ({ txt: o.txt, sub: probTxt(s, o) })),
     });
-    return;
-  }
-
-  /* La interfaz trae el momento ya escrito y validado: se guarda en el partido
-   * (para que resolverMomento lo use) y se reabre la pantalla. */
-  function aplicarMomento(s, lista) {
-    if (!s.partido) return s.pendiente;
-    const jugadas = Array.isArray(lista) ? lista : [lista];
-    s.partido.momentos.forEach((m, i) => { if (jugadas[i]) m.gen = jugadas[i]; });
-    s.me.momentosVistos = (s.me.momentosVistos || []).concat(jugadas.map((j) => j.texto)).slice(-12);
-    if (s.pendiente && s.pendiente.esperandoIA) {
-      s.pendiente = null;
-      empujarMomento(s);
-      return siguiente(s);
-    }
-    return s.pendiente;
   }
 
   function probTxt(s, o) {
@@ -916,8 +813,7 @@
   function resolverMomento(s, i) {
     const { r, done } = rngDe(s);
     const P = s.partido, p = yo(s), me = s.me;
-    const gen = P.momentos[P.idx].gen;
-    const m = gen || D.MOMENTS.find((x) => x.id === P.momentos[P.idx].id);
+    const m = D.MOMENTS.find((x) => x.id === P.momentos[P.idx].id);
     const o = m.opts[i];
     const exito = r.chance(probOpcion(p, o));
     const ef = (exito ? o.ok : o.mal) || {};
@@ -1985,8 +1881,8 @@
 
   const Exported = {
     SEMANAS, W_LIGA, W_COPA, W_CONT, W_LIBRE, PERFILES,
-    nuevaPartida, resolver, siguiente, tipoSemana, rivalDe, proximoPartido, proximosPartidos, patrimonio, dinero,
-    gastarPunto, invertir, retirarInv, setEstilo, aplicarMomento, setTactica, setXI, autoXI,
+    nuevaPartida, resolver, siguiente, tipoSemana, rivalDe, patrimonio, dinero,
+    gastarPunto, invertir, retirarInv, setEstilo, setTactica, setXI, autoXI,
     fuerzaDT, plantelDT, guardar, cargar, yo, clubDe, ligaDe, probOpcion, valueOf,
   };
   if (isNode) module.exports = Exported;

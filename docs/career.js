@@ -45,11 +45,46 @@
   function push(s, p) { s.cola.push(p); }
 
   /* ================================================================ inicio */
+  /* La categoría de abajo no viene en mundo.js: son clubes de barrio del país
+   * que elegiste, armados con sus ciudades reales, y cambian en cada carrera.
+   * De acá sales, y a esta liga no vuelve nadie que haya subido. */
+  const PREFIJOS_BARRIO = ["Deportivo", "Unión", "Atlético", "Juventud", "Sport", "Defensor",
+    "Cultural", "Estrella", "Racing", "Independiente", "Municipal", "Real"];
+  const PAL_BARRIO = ["#c8102e", "#1b3f8f", "#0a8f4a", "#f5d200", "#111111", "#ffffff",
+    "#5aa9e6", "#f5820a", "#7b1b2b", "#7a3fb5"];
+
+  function crearAmateur(s, pais, r) {
+    const info = D.PAISES.find((p) => p.cod === pais);
+    const liga = D.LEAGUES.find((l) => l.id === pais + "3");
+    if (!info || !liga) return;
+    const ciudades = info.ciudades && info.ciudades.length ? info.ciudades : [info.nombre];
+    const usados = new Set(s.clubs.map((c) => c.name));
+    let i = 0, puestos = 0;
+    while (puestos < 18 && i < 600) {
+      const ciudad = ciudades[i % ciudades.length];
+      const name = `${PREFIJOS_BARRIO[(i * 7 + 5) % PREFIJOS_BARRIO.length]} ${ciudad}`;
+      i++;
+      if (usados.has(name)) continue;
+      usados.add(name);
+      const c1 = r.pick(PAL_BARRIO);
+      let c2 = r.pick(PAL_BARRIO);
+      if (c2 === c1) c2 = c1 === "#ffffff" ? "#111111" : "#ffffff";
+      s.clubs.push({
+        id: s.clubs.length, leagueId: liga.id, name, city: ciudad,
+        prestige: clamp(Math.round(4 + liga.tier * 2.5 + r.int(-2, 6)), 3, 38),
+        kit: { pat: r.pick(["liso", "liso", "rayas", "banda", "mitades"]), c1, c2, trim: c2 },
+        colors: [c1, c2], squad: [], form: 0, titulos: { liga: 0, copa: 0, cont: 0 },
+      });
+      puestos++;
+    }
+  }
+
   function nuevaPartida(opts) {
     const seed = (opts.seed != null ? opts.seed : Math.floor(Math.random() * 1e9)) >>> 0;
+    const pais = D.PAISES.some((p) => p.cod === opts.pais) ? opts.pais : "pe";
     const w = E.buildWorld(seed);
     const s = {
-      v: 1, seed, rngState: w.rngState, fase: "jugador",
+      v: 2, seed, pais, rngState: w.rngState, fase: "jugador",
       temporada: 1, anio: 2026, semana: 1,
       clubs: w.clubs, players: w.players,
       comp: null, feed: [], cola: [], pendiente: null, partido: null, dt: null,
@@ -70,15 +105,23 @@
     s.me.prof = perfil.prof;
     s.me.dtxp = perfil.dt || 0;
 
-    /* Tú: 16 años, media baja, potencial escondido hasta que alguien te vea. */
-    const you = E.genPlayer(r, { pos: opts.pos || "DC", age: 16, target: 44, region: "sud", clubId: 0, leagueId: "pe3" });
+    /* Los clubes de barrio de tu país y sus planteles: es la única liga que
+     * arranca materializada, el resto del mundo corre en abstracto. */
+    crearAmateur(s, pais, r);
+    done();
+    E.materializarLiga(s, pais + "3");
+
+    /* Tú: 16 años, media baja, potencial escondido hasta que alguien te vea.
+     * Va con su propio rng porque materializar la liga movió el estado. */
+    const yo2 = rngDe(s);
+    const you = E.genPlayer(yo2.r, { pos: opts.pos || "DC", age: 16, target: 44, region: "sud", clubId: 0, leagueId: pais + "3" });
     you.id = 0; you.name = opts.nombre || "Chibolo del Potrero"; you.yo = true;
     for (const k in perfil.d) you.attrs[k] = clamp(you.attrs[k] + perfil.d[k], 20, 90);
-    you.pot = clamp(media(you) + r.int(13, 33) + perfil.pot, 60, 97);
-    you.apodo = r.pick(D.CITY_NICK);
+    you.pot = clamp(media(you) + yo2.r.int(13, 33) + perfil.pot, 60, 97);
+    you.apodo = yo2.r.pick(D.CITY_NICK);
     you.years = 2;
     s.players[0] = you;
-    done();
+    yo2.done();
 
     nuevaTemporada(s, true);
     /* Arranque: tres clubes chicos te prueban. Eliges tu primera camiseta. */
@@ -91,20 +134,20 @@
     const { r, done } = rngDe(s);
     /* Dos equipos de tierra que te ponen a jugar ya, y una cantera de Primera:
      * mejor gente, mejores canchas, pero ahí adentro eres uno más de treinta. */
-    const barrio = r.shuffle(s.clubs.filter((c) => c.leagueId === "pe3")).slice(0, 2);
+    const barrio = r.shuffle(s.clubs.filter((c) => c.leagueId === s.pais + "3")).slice(0, 2);
     const opts = barrio.map((c) => {
       const sueldo = Math.round(wageFor(c, 46, 16) * (0.8 + r.next() * 0.6) / 10) * 10;
       const minutos = clamp(Math.round(96 - c.prestige * 1.6 + r.int(-6, 6)), 45, 95);
       return {
-        txt: `${c.name} (Copa Perú)`,
+        txt: `${c.name} (${ligaDe(s, c.id).name})`,
         club: c.id, sueldo, minutos,
         sub: `${dinero(sueldo)}/semana · ${minutos}% de chance de entrar · ${c.city}. Cancha de tierra, pero se juega.`,
       };
     });
-    const grandes = s.clubs.filter((c) => c.leagueId === "pe").sort((a, b) => b.prestige - a.prestige).slice(0, 6);
+    const grandes = s.clubs.filter((c) => c.leagueId === s.pais + "1").sort((a, b) => b.prestige - a.prestige).slice(0, 6);
     const cant = r.pick(grandes);
     opts.push({
-      txt: `Cantera de ${cant.name} (Primera)`,
+      txt: `Cantera de ${cant.name} (${ligaDe(s, cant.id).name})`,
       club: cant.id, sueldo: Math.round(wageFor(cant, 40, 16) / 10) * 10, minutos: 0, cantera: true,
       sub: "Sueldo de mentira y reserva todos los fines de semana, pero entrenas el doble y el club está en Primera. Si rindes, te suben.",
     });
@@ -144,19 +187,27 @@
     const comp = { ligas: {}, copa: {}, cont: {} };
     for (const l of D.LEAGUES) {
       const ids = s.clubs.filter((c) => c.leagueId === l.id).map((c) => c.id);
+      /* Las terceras categorías de los países que no elegiste están vacías: no
+       * se inventan clubes de barrio en Noruega si vos empezaste en Perú. */
+      if (ids.length < 2) continue;
       comp.ligas[l.id] = { fixtures: E.makeSchedule(r, ids), tabla: ids.map(E.emptyRow), fecha: 0 };
+      if (!l.cup) continue;
       /* Los cabezas de serie salen de la tabla del año pasado, pero filtrada
        * por quién sigue en la categoría: los que ascendieron o descendieron
        * entran al final del cuadro. Sin este filtro un club sembrado en una
        * copa que ya no juega deja el cuadro con un lugar vacío. */
       comp.copa[l.id] = { ronda: 0, llaves: cuadroCopa(sembrado(s, l.id, ids)), campeon: null };
     }
-    for (const cid of ["condor", "europa"]) {
-      const ligas = D.LEAGUES.filter((l) => l.cont === cid);
+    for (const cid in D.CONTINENTALES) {
+      /* Ahora hay hasta 22 ligas por confederación y la copa entra en dos
+       * grupos de cuatro, así que clasifican los dos mejores de las cuatro
+       * ligas más fuertes del continente. Es una Libertadores chica, pero
+       * respeta quién debería estar ahí. */
+      const ligas = D.LEAGUES.filter((l) => l.cont === cid).sort((a, b) => b.tier - a.tier).slice(0, 4);
       let clasificados = [];
       for (const l of ligas) {
         const ids = s.clubs.filter((c) => c.leagueId === l.id).map((c) => c.id);
-        clasificados = clasificados.concat(sembrado(s, l.id, ids).slice(0, 4));
+        clasificados = clasificados.concat(sembrado(s, l.id, ids).slice(0, 2));
       }
       const mix = r.shuffle(clasificados);
       const grupos = [mix.slice(0, 4), mix.slice(4, 8)];
@@ -184,11 +235,19 @@
     return orden.concat(faltan);
   }
 
+  /* Cuadro de copa para cualquier cantidad de equipos. La ronda previa la
+   * juegan solo los peores sembrados, los justos para que después del primer
+   * cruce queden exactamente una potencia de dos: si no, en alguna ronda queda
+   * un impar y alguien se cruza con nadie. */
   function cuadroCopa(seeds) {
-    /* 12 equipos: los 4 primeros esperan, los otros 8 se cruzan. */
-    const byes = seeds.slice(0, 4), resto = seeds.slice(4);
+    if (seeds.length < 2) return { byes: seeds.slice(), rondas: [] };
+    let p = 1;
+    while (p * 2 <= seeds.length) p *= 2;
+    const previa = seeds.length - p;              // cuántos cruces hacen falta
+    const byes = seeds.slice(0, seeds.length - previa * 2);
+    const resto = seeds.slice(byes.length);
     const r1 = [];
-    for (let i = 0; i < 4; i++) r1.push([resto[i], resto[7 - i]]);
+    for (let i = 0; i < resto.length / 2; i++) r1.push([resto[i], resto[resto.length - 1 - i]]);
     return { byes, rondas: [r1] };
   }
 
@@ -201,6 +260,9 @@
     const movidas = [];
     for (const arriba of D.LEAGUES.filter((l) => l.baja)) {
       const abajo = D.LEAGUES.find((l) => l.id === arriba.baja);
+      /* La categoría de abajo puede no existir en este país (solo se puebla la
+       * del país que elegiste): sin rival de ascenso, no hay intercambio. */
+      if (!s.comp.ligas[arriba.id] || !abajo || !s.comp.ligas[abajo.id]) continue;
       const tA = E.sortTable(s.comp.ligas[arriba.id].tabla);
       const tB = E.sortTable(s.comp.ligas[abajo.id].tabla);
       movidas.push({ ids: tA.slice(-2).map((x) => x.clubId), destino: abajo.id, d: -5 });
@@ -228,6 +290,10 @@
 
   function retiradosYCantera(s, r) {
     for (const c of s.clubs) {
+      /* Los clubes abstractos no envejecen jugador por jugador: no tienen. Sin
+       * este corte, cada pretemporada le inventaría plantel a las mil ligas y
+       * el archivo de guardado se iría a diez megas. */
+      if (!c.squad.length) continue;
       const league = D.LEAGUES.find((l) => l.id === c.leagueId);
       c.squad = c.squad.filter((id) => {
         if (id === 0) return true;
@@ -277,7 +343,22 @@
   /* El corazón del bucle: vacía la cola de decisiones, y cuando no queda
    * ninguna cierra la semana y arranca la siguiente. Todo lo que consume
    * tiempo marca `necesitaCierre`, así ninguna semana especial se cuelga. */
+  /* Solo la liga donde estás metido tiene jugadores de carne y hueso. Al
+   * cambiar de club (fichaje, ascenso, descenso o banco de DT) se le generan
+   * planteles a la liga nueva y se suelta la vieja, así el archivo de guardado
+   * no crece con jugadores de ligas que ya nadie mira. */
+  function asegurarPlantel(s) {
+    const clubId = s.fase === "dt" && s.dt ? s.dt.clubId : (s.players[0] ? s.players[0].clubId : null);
+    if (clubId == null || !s.clubs[clubId]) return;
+    const lid = s.clubs[clubId].leagueId;
+    if (s.ligaFoco === lid) return;
+    E.materializarLiga(s, lid);
+    if (s.ligaFoco) E.soltarLiga(s, s.ligaFoco, clubId);
+    s.ligaFoco = lid;
+  }
+
   function siguiente(s) {
+    asegurarPlantel(s);
     for (let guard = 0; guard < 500; guard++) {
       if (s.cola.length) { s.pendiente = s.cola.shift(); return s.pendiente; }
       if (s.fase === "fin" || s.fase === "retirado") return s.pendiente;
@@ -351,6 +432,7 @@
     const club = s.clubs[miClubId(s)];
     if (t === "liga") {
       const L = s.comp.ligas[club.leagueId];
+      if (!L) return null;
       const fecha = L.fixtures[L.fecha];
       if (!fecha) return null;
       for (const [h, a] of fecha) {
@@ -361,6 +443,7 @@
     }
     if (t === "copa") {
       const C = s.comp.copa[club.leagueId];
+      if (!C) return null;              // la categoría de barrio no juega copa
       const ronda = C.llaves.rondas[C.ronda];
       if (!ronda) return null;
       for (const [h, a] of ronda) {
@@ -373,6 +456,7 @@
       const cid = ligaDe(s, club.id).cont;
       if (!cid) return null;              // en las ligas de abajo no hay copa internacional
       const K = s.comp.cont[cid];
+      if (!K) return null;
       if (K.fase === "grupos") {
         for (let g = 0; g < 2; g++) {
           const fecha = K.fixtures[g][K.fecha];
@@ -527,6 +611,7 @@
     const miClub = clubReservado(s);
     for (const l of D.LEAGUES) {
       const L = s.comp.ligas[l.id];
+      if (!L) continue;
       const fecha = L.fixtures[L.fecha];
       if (!fecha) continue;
       for (const [h, a] of fecha) {
@@ -541,6 +626,7 @@
     const miClub = clubReservado(s);
     for (const l of D.LEAGUES) {
       const C = s.comp.copa[l.id];
+      if (!C) continue;
       const ronda = C.llaves.rondas[C.ronda];
       if (!ronda || C.campeon) continue;
       C.ganadores = C.ganadores || [];
@@ -556,7 +642,7 @@
   function avanzarCopa(s, r) {
     for (const l of D.LEAGUES) {
       const C = s.comp.copa[l.id];
-      if (C.campeon) continue;
+      if (!C || C.campeon) continue;
       const gan = C.ganadores || [];
       C.ganadores = [];
       let siguientes;
@@ -576,7 +662,7 @@
 
   function simFechaCont(s, r) {
     const miClub = clubReservado(s);
-    for (const cid of ["condor", "europa"]) {
+    for (const cid in D.CONTINENTALES) {
       const K = s.comp.cont[cid];
       if (K.campeon) continue;
       if (K.fase === "grupos") {
@@ -613,7 +699,7 @@
   }
 
   function avanzarCont(s, r) {
-    for (const cid of ["condor", "europa"]) {
+    for (const cid in D.CONTINENTALES) {
       const K = s.comp.cont[cid];
       if (K.campeon) continue;
       if (K.fase === "grupos") {
@@ -861,7 +947,7 @@
     }
 
     /* El calendario avanza igual, dirijas, juegues o mires de afuera. */
-    if (t === "liga") D.LEAGUES.forEach((l) => s.comp.ligas[l.id].fecha++);
+    if (t === "liga") D.LEAGUES.forEach((l) => { if (s.comp.ligas[l.id]) s.comp.ligas[l.id].fecha++; });
     if (t === "copa") avanzarCopa(s, r);
     if (t === "cont") avanzarCont(s, r);
     done();
@@ -992,7 +1078,12 @@
     const libres = D.SPONSORS.filter((sp) => sp.min <= me.fama && !me.sponsors.some((x) => x.id === sp.id));
     if (!libres.length) return;
     const sp = r.pick(libres);
-    const pago = Math.round(sp.base * Math.pow(clamp(me.fama / 50, 0.3, 2.4), 1.25) / 10) * 10;
+    /* La fama manda, pero el sueldo pone el techo: una marca no te paga cien
+     * veces lo que te paga tu club. Sin esto, en una liga chica los sponsors
+     * eran toda tu economía y el fútbol daba lo mismo. */
+    const bruto = sp.base * Math.pow(clamp(me.fama / 50, 0.3, 2.4), 1.25);
+    const techo = Math.max(400, yo(s).wage * 2.5);
+    const pago = Math.round(Math.min(bruto, techo) / 10) * 10;
     s.cola.push({
       tipo: "sponsor", titulo: `Te busca ${sp.marca}`, sponsorId: sp.id, pago,
       texto: `${sp.marca} te ofrece ${dinero(pago)} por semana${sp.riesgo ? ". Aviso: la marca es medio turbia." : "."}`,
@@ -1016,6 +1107,7 @@
     const p = yo(s), me = s.me;
     const lineas = [];
     for (const l of D.LEAGUES) {
+      if (!s.comp.ligas[l.id]) continue;
       const tabla = E.sortTable(s.comp.ligas[l.id].tabla);
       const campeon = s.clubs[tabla[0].clubId];
       campeon.titulos.liga++;
@@ -1027,15 +1119,15 @@
     }
     for (const l of D.LEAGUES) {
       const C = s.comp.copa[l.id];
-      if (C.campeon != null && C.campeon === p.clubId) {
+      if (C && C.campeon != null && C.campeon === p.clubId) {
         me.carrera.titulos.copa++; me.rep = clamp(me.rep + 4, 0, 100);
         feed(s, `Ganaron la ${l.cup}.`, "hito");
       }
     }
-    for (const cid of ["condor", "europa"]) {
+    for (const cid in D.CONTINENTALES) {
       const K = s.comp.cont[cid];
       if (K.campeon != null) {
-        lineas.push(`Copa ${cid === "condor" ? "Cóndor" : "de Europa"}: ${s.clubs[K.campeon].name}`);
+        lineas.push(`${D.CONTINENTALES[cid]}: ${s.clubs[K.campeon].name}`);
         if (K.campeon === p.clubId) {
           me.carrera.titulos.cont++; me.rep = clamp(me.rep + 12, 0, 100); me.fama = clamp(me.fama + 10, 0, 100);
           feed(s, `COPA INTERNACIONAL. Te vas a acordar de esta noche toda la vida.`, "hito");
@@ -1047,7 +1139,7 @@
       const club = s.clubs[q.clubId];
       const tier = D.LEAGUES.find((l) => l.id === club.leagueId).tier;
       const score = q.st.g * 1.5 + q.st.a * 0.9 + media(q) * 0.4 + tier * 5
-        + (s.comp.cont.condor.campeon === club.id || s.comp.cont.europa.campeon === club.id ? 14 : 0);
+        + (Object.keys(D.CONTINENTALES).some((cid) => s.comp.cont[cid].campeon === club.id) ? 14 : 0);
       return { q, score };
     }).sort((a, b) => b.score - a.score);
     const ganador = cands[0].q;
@@ -1330,6 +1422,7 @@
   }
 
   function plantelDT(s) {
+    asegurarPlantel(s);
     const club = s.clubs[s.dt.clubId];
     return club.squad.map((id) => s.players[id]).filter(Boolean);
   }
@@ -1755,7 +1848,7 @@
   /* ============================================================ save/load */
   function guardar(s) {
     return JSON.stringify({
-      v: s.v, seed: s.seed, rngState: s.rngState, fase: s.fase, temporada: s.temporada,
+      v: s.v, seed: s.seed, pais: s.pais, ligaFoco: s.ligaFoco, rngState: s.rngState, fase: s.fase, temporada: s.temporada,
       anio: s.anio, semana: s.semana, clubs: s.clubs, players: s.players, comp: s.comp,
       feed: s.feed.slice(0, 80), cola: s.cola, pendiente: s.pendiente, partido: s.partido,
       dt: s.dt, dtPartido: s.dtPartido, me: s.me,
@@ -1765,7 +1858,9 @@
     if (!txt) return null;
     try {
       const o = JSON.parse(txt);
-      if (!o || o.v !== 1 || !o.players) return null;
+      /* La v1 tenía otro mundo (72 clubes inventados): esas partidas ya no
+       * se pueden seguir jugando, mejor decirlo que cargar algo roto. */
+      if (!o || o.v !== 2 || !o.players) return null;
       return o;
     } catch { return null; }
   }

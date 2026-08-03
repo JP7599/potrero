@@ -2,318 +2,239 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>POTRERO — del barrio a la gloria (y después al banco)</title>
-<meta name="description" content="Modo carrera de fútbol: empiezas en la Copa Perú y terminas donde puedas. Sin instalación, sin cuenta, sin internet.">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>POTRERO — del barrio a la gloria</title>
+<meta name="description" content="Modo carrera de fútbol: eliges tu país, empiezas en la última categoría y llegas donde alcances. Clubes reales, sin instalación y sin cuenta.">
+<meta name="theme-color" content="#0a7c42">
 <style>
-  /* POTRERO — arcade 16 bits, limpio.
+  /* POTRERO — interfaz.
    *
-   * Nada de texturas ni ruido: bordes duros de 2px, sombras sólidas sin
-   * difuminar, barras partidas en bloques y todo alineado a una grilla de 4px.
-   * Los pixeles de verdad están donde importan: el logo y los escudos, que se
-   * dibujan como SVG en escudos.js. */
-  * { box-sizing: border-box; }
+   * Una sola columna, una decisión por pantalla, navegación abajo al alcance
+   * del pulgar. El teléfono manda: en pantalla grande es la misma columna
+   * centrada con la navegación arriba, no un tablero distinto. Nada de
+   * adornos; el color se usa para decir algo (verde bien, rojo mal) y nunca
+   * para decorar. */
+  *, *::before, *::after { box-sizing: border-box; }
   :root {
-    --noche: #0b1220;      /* fondo de la cabina */
-    --panel: #141d31;
-    --panel2: #1b2740;
-    --hueco: #0e1626;
-    --linea: #2a3854;
-    --tinta: #060a12;
-    --texto: #e6ecfa;
-    --tenue: #8ea0c2;
-    --verde: #2fe07a;
-    --verde2: #17a854;
-    --amar: #f7e04b;
-    --cian: #4fd8f0;
-    --rojo: #ff5b52;
-    --magenta: #ff5fae;
-    --naranja: #ff9d3c;
-    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
-    --ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    --sombra: 4px 4px 0 var(--tinta);
-    --sombra-sm: 3px 3px 0 var(--tinta);
+    --bg: #f2f4f6;
+    --card: #ffffff;
+    --card2: #f7f8fa;
+    --texto: #14171c;
+    --tenue: #67707d;
+    --linea: #e3e6ea;
+    --verde: #0a7c42;
+    --verde-suave: #e7f4ed;
+    --rojo: #c62f22;
+    --rojo-suave: #fdeceb;
+    --ambar: #a86008;
+    --ambar-suave: #fdf1e0;
+    --sombra: 0 1px 2px rgba(16,20,26,.06), 0 4px 14px rgba(16,20,26,.05);
+    --radio: 14px;
+    --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+    --num: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --nav-h: 60px;
   }
-  html, body { margin: 0; padding: 0; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1116; --card: #171b21; --card2: #1e232b; --texto: #e9ecf1;
+      --tenue: #98a2b0; --linea: #272d36;
+      --verde: #35c47c; --verde-suave: #14311f;
+      --rojo: #ff6b60; --rojo-suave: #351a17;
+      --ambar: #f0b354; --ambar-suave: #33260f;
+      --sombra: 0 1px 2px rgba(0,0,0,.3);
+    }
+  }
+  html { -webkit-text-size-adjust: 100%; }
   body {
-    min-height: 100vh; font-family: var(--ui); color: var(--texto);
-    background-color: var(--noche);
-    /* Rayas de cancha recién cortada, apenas insinuadas. */
-    background-image: repeating-linear-gradient(90deg, rgba(255,255,255,.014) 0 72px, transparent 72px 144px);
-    background-attachment: fixed;
+    margin: 0; background: var(--bg); color: var(--texto);
+    font-family: var(--ui); font-size: 16px; line-height: 1.45;
     -webkit-font-smoothing: antialiased;
+    padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
   }
-  .marco { max-width: 1200px; margin: 0 auto; padding: 20px 16px 64px; }
+  .app { max-width: 560px; margin: 0 auto; padding: 0 14px; }
+  .num { font-family: var(--num); font-variant-numeric: tabular-nums; }
+  .tenue { color: var(--tenue); }
 
-  /* ------------------------------------------------------------- tipografía */
-  .lab, .tab, button, th, .chip, .via {
-    font-family: var(--mono); text-transform: uppercase; letter-spacing: .08em;
+  /* ------------------------------------------------------------ cabecera */
+  .top {
+    position: sticky; top: 0; z-index: 20; background: var(--bg);
+    padding: 10px 0 8px; border-bottom: 1px solid var(--linea);
   }
-  .lab { font-size: 10px; color: var(--tenue); display: block; margin-bottom: 6px; }
-  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-  .mini { font-size: 12px; color: var(--tenue); line-height: 1.5; }
+  .top .fila { display: flex; align-items: center; gap: 10px; }
+  .camiseta { width: 34px; height: 34px; flex: none; display: block; }
+  .camiseta.mini { width: 22px; height: 22px; }
+  .camiseta.grande { width: 60px; height: 60px; }
+  .top .quien { min-width: 0; flex: 1; }
+  .top .club { font-weight: 650; font-size: 15px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .top .liga { font-size: 12px; color: var(--tenue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .top .plata { font-family: var(--num); font-weight: 700; font-size: 15px; color: var(--verde); }
+  .barra-temp { height: 3px; background: var(--linea); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+  .barra-temp i { display: block; height: 100%; background: var(--verde); border-radius: 3px; }
+  .semana { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--tenue); margin-top: 5px; }
 
-  /* --------------------------------------------------------------- cabecera */
-  .top { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
-  .logo-svg { height: clamp(38px, 6.5vw, 60px); width: auto; display: block; }
-  .bajada { font-size: 13px; color: var(--tenue); max-width: 360px; margin: 6px 0 0; line-height: 1.5; }
-  .top .der { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
-
-  /* ---------------------------------------------------------------- piezas */
-  .panel {
-    background: var(--panel); border: 2px solid var(--linea);
-    box-shadow: var(--sombra); padding: 14px; margin-bottom: 14px;
+  /* -------------------------------------------------------------- piezas */
+  .card {
+    background: var(--card); border-radius: var(--radio); box-shadow: var(--sombra);
+    padding: 16px; margin: 12px 0;
   }
-  .panel > h2 { margin: 0 0 10px; }
-  h2.titulito {
-    font-family: var(--mono); text-transform: uppercase; letter-spacing: .1em;
-    font-size: 11px; color: var(--cian); margin: 0 0 10px;
-  }
-  .sep { height: 2px; background: var(--linea); margin: 14px 0; }
-  .fila { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .card.plano { box-shadow: none; border: 1px solid var(--linea); }
+  h1 { font-size: 24px; line-height: 1.2; margin: 0 0 6px; font-weight: 700; letter-spacing: -0.01em; }
+  h2 { font-size: 13px; margin: 0 0 10px; font-weight: 650; color: var(--tenue); letter-spacing: .02em; }
+  p { margin: 0 0 12px; }
+  .texto { color: var(--texto); }
+  .sep { height: 1px; background: var(--linea); margin: 14px 0; }
 
   button {
-    font-size: 11px; background: var(--panel2); color: var(--texto);
-    border: 2px solid var(--linea); padding: 8px 12px; cursor: pointer;
-    box-shadow: var(--sombra-sm); transition: transform .05s, box-shadow .05s, background .1s;
+    font: inherit; color: inherit; background: none; border: none; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
-  button:hover { background: #24345a; transform: translate(-1px,-1px); box-shadow: 4px 4px 0 var(--tinta); }
-  button:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 var(--tinta); }
-  button:focus-visible { outline: 2px solid var(--cian); outline-offset: 2px; }
-  button.pri { background: var(--verde2); border-color: var(--verde); color: #eafff2; }
-  button.pri:hover { background: var(--verde); color: var(--tinta); }
-  button.on { background: var(--cian); border-color: var(--cian); color: var(--tinta); }
-  button.chico { font-size: 10px; padding: 5px 8px; box-shadow: 2px 2px 0 var(--tinta); }
-  button:disabled { opacity: .4; cursor: not-allowed; }
+  .btn {
+    display: block; width: 100%; text-align: left; background: var(--card);
+    border: 1px solid var(--linea); border-radius: 12px; padding: 14px 16px;
+    margin-bottom: 8px; font-weight: 600; transition: background .12s, border-color .12s, transform .06s;
+    min-height: 52px;
+  }
+  .btn:hover { border-color: var(--verde); background: var(--verde-suave); }
+  .btn:active { transform: scale(.988); }
+  .btn .sub { display: block; font-weight: 400; font-size: 13.5px; color: var(--tenue); margin-top: 3px; line-height: 1.35; }
+  .btn.primario {
+    background: var(--verde); color: #fff; border-color: var(--verde);
+    text-align: center; font-size: 17px; font-weight: 650;
+  }
+  .btn.primario:hover { filter: brightness(1.07); background: var(--verde); }
+  .btn.chico { padding: 9px 12px; min-height: 0; font-size: 14px; margin-bottom: 0; width: auto; display: inline-block; border-radius: 10px; }
+  .btn:disabled { opacity: .45; cursor: default; }
+
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill {
+    border: 1px solid var(--linea); background: var(--card); border-radius: 999px;
+    padding: 8px 14px; font-size: 14px; font-weight: 550; min-height: 40px;
+  }
+  .pill.on { background: var(--verde); border-color: var(--verde); color: #fff; }
 
   input {
-    font-family: var(--mono); font-size: 13px; padding: 9px 10px; width: 100%;
-    background: var(--hueco); color: var(--texto); border: 2px solid var(--linea);
+    font: inherit; width: 100%; padding: 12px 14px; border-radius: 12px;
+    border: 1px solid var(--linea); background: var(--card); color: var(--texto);
   }
-  input:focus { outline: none; border-color: var(--cian); }
+  input:focus { outline: 2px solid var(--verde); outline-offset: -1px; border-color: transparent; }
+  label { display: block; font-size: 13px; font-weight: 600; color: var(--tenue); margin: 16px 0 7px; }
 
-  /* ----------------------------------------------------------------- inicio */
-  .inicio-grid { display: grid; grid-template-columns: 1fr 1.15fr; gap: 22px; }
-  .pos-sel { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-  .perfiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
-  .perfil {
-    text-align: left; text-transform: none; letter-spacing: 0; font-family: var(--ui);
-    font-size: 12px; line-height: 1.4; padding: 10px; color: var(--tenue);
-  }
-  .perfil b {
-    font-family: var(--mono); text-transform: uppercase; letter-spacing: .06em;
-    font-size: 12px; display: block; margin-bottom: 4px; color: var(--texto);
-  }
-  .perfil.on { background: var(--panel2); border-color: var(--amar); }
-  .perfil.on b { color: var(--amar); }
-
-  /* -------------------------------------------------------------------- hud */
-  .hud {
-    display: flex; align-items: center; gap: 10px 18px; flex-wrap: wrap;
-    background: var(--hueco); border: 2px solid var(--linea); box-shadow: var(--sombra);
-    padding: 10px 14px; margin-bottom: 14px;
-  }
-  .hud .via { font-size: 11px; color: var(--tenue); }
-  .hud .via b { color: var(--texto); }
-  .hud .plata { margin-left: auto; font-family: var(--mono); font-size: 19px; font-weight: 700; color: var(--verde); }
-  .barra-sem { flex-basis: 100%; height: 6px; background: var(--panel2); border: 2px solid var(--linea); }
-  .barra-sem i { display: block; height: 100%; background: var(--cian); }
-
-  /* --------------------------------------------------------------- tablero */
-  .tablero { display: grid; grid-template-columns: 300px 1fr; gap: 14px; align-items: start; }
-  @media (max-width: 940px) {
-    .tablero, .inicio-grid { grid-template-columns: 1fr; }
-  }
-  @media (max-width: 560px) {
-    .grid2 { grid-template-columns: 1fr; }
+  /* ------------------------------------------------------------ decisión */
+  .opcion { position: relative; }
+  .opcion .prob {
+    float: right; font-family: var(--num); font-size: 13px; color: var(--verde);
+    font-weight: 700; margin-left: 10px;
   }
 
-  /* ------------------------------------------------------------------ ficha */
-  .ficha { padding: 0; overflow: hidden; }
-  .ficha .cab { display: flex; gap: 12px; align-items: center; padding: 14px; }
-  .escudo { width: 56px; height: 63px; flex: none; image-rendering: pixelated; }
-  .escudo.chico { width: 16px; height: 18px; vertical-align: -4px; margin-right: 6px; }
-  .escudo.med { width: 28px; height: 32px; }
-  .ficha .nom { font-size: 17px; font-weight: 700; line-height: 1.1; }
-  .ficha .apodo { font-size: 12px; color: var(--tenue); font-style: italic; margin-top: 2px; }
-  .ficha .club { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--tenue); margin-top: 5px; }
-  .ficha .med {
-    margin-left: auto; text-align: center; font-family: var(--mono);
-    background: var(--tinta); border: 2px solid var(--linea); padding: 4px 8px;
+  /* ------------------------------------------------------------ marcador */
+  .marcador { display: flex; align-items: center; gap: 10px; padding: 4px 0 12px; }
+  .marcador .lado { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; min-width: 0; }
+  .marcador .nom { font-size: 12.5px; font-weight: 600; line-height: 1.2; }
+  .marcador .goles { font-size: 34px; font-weight: 700; letter-spacing: -.02em; font-family: var(--num); }
+  .marcador .vs { font-size: 12px; color: var(--tenue); }
+  .gano { color: var(--verde); } .perdio { color: var(--rojo); }
+  .nota { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .nota b {
+    font-family: var(--num); font-size: 22px; padding: 4px 10px; border-radius: 10px;
+    background: var(--card2);
   }
-  .ficha .med b { display: block; font-size: 24px; line-height: 1; color: var(--amar); }
-  .ficha .med span { font-size: 8px; letter-spacing: .1em; color: var(--tenue); }
-  .ficha .tira { display: flex; }
-  .ficha .tira i { flex: 1; height: 6px; }
-
-  /* Barras partidas en bloques: el truco de 16 bits que hace que un porcentaje
-   * se lea de un vistazo sin tener que contar números. */
-  .barras { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px 14px; }
-  .barra .lab { display: flex; justify-content: space-between; margin-bottom: 4px; }
-  .barra .lab i { font-style: normal; color: var(--texto); }
-  .barra .riel { height: 10px; background: var(--hueco); border: 2px solid var(--linea); padding: 0; }
-  .barra .rel {
-    height: 100%; background: var(--verde);
-    -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 6px);
-    mask-image: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 6px);
-  }
-  .barra.medio .rel { background: var(--amar); }
-  .barra.mal .rel { background: var(--rojo); }
-
-  /* --------------------------------------------------------------- pantalla */
-  .pantalla {
-    background: var(--panel); border: 2px solid var(--linea); box-shadow: var(--sombra);
-    padding: 0; margin-bottom: 14px;
-  }
-  .pantalla .cinta {
-    background: var(--hueco); border-bottom: 2px solid var(--linea);
-    font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
-    color: var(--cian); padding: 7px 14px;
-  }
-  .pantalla .cuerpo { padding: 16px; }
-  .titulo { font-size: clamp(19px, 2.6vw, 26px); line-height: 1.12; margin: 0 0 8px; font-weight: 700; }
-  .texto { font-size: 15px; line-height: 1.55; color: #cfd9ee; margin: 0 0 14px; }
-  .opciones { display: grid; gap: 8px; }
-  /* Las opciones traen desde una probabilidad de tres palabras hasta una frase
-   * entera, así que el texto de apoyo va debajo y con el ancho completo: nada
-   * de columnas que se estrangulan cuando el rival tiene nombre largo. */
-  .opcion {
-    display: block; width: 100%; text-align: left; text-transform: none; letter-spacing: 0;
-    font-family: var(--ui); font-size: 14px; font-weight: 600; line-height: 1.35;
-    padding: 11px 13px; background: var(--panel2); border-color: var(--linea);
-  }
-  .opcion:hover { background: #26375f; border-color: var(--cian); }
-  .opcion .sub {
-    display: block; font-weight: 400; font-size: 12px; line-height: 1.45;
-    color: var(--tenue); margin-top: 4px;
-  }
-  .opcion:hover .sub { color: #b6c6e2; }
-
-  /* -------------------------------------------------------------- marcador */
-  .marcador {
-    display: flex; align-items: center; justify-content: center; gap: 14px;
-    background: var(--tinta); border: 2px solid var(--linea); padding: 14px 10px; margin-bottom: 12px;
-  }
-  .marcador .eq { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; min-width: 0; }
-  .marcador .eq.der { flex-direction: row-reverse; text-align: right; }
-  .marcador .goles { font-family: var(--mono); font-size: 36px; font-weight: 700; line-height: 1; letter-spacing: .04em; }
-  .marcador .goles.gano { color: var(--verde); }
-  .marcador .goles.perdio { color: var(--rojo); }
-  .nota-caja { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-  .nota {
-    font-family: var(--mono); font-size: 26px; font-weight: 700; line-height: 1;
-    padding: 6px 10px; border: 2px solid var(--linea); background: var(--hueco);
-  }
-  .nota.buena { color: var(--verde); border-color: var(--verde2); }
-  .nota.mala { color: var(--rojo); border-color: var(--rojo); }
+  .nota b.buena { background: var(--verde-suave); color: var(--verde); }
+  .nota b.mala { background: var(--rojo-suave); color: var(--rojo); }
   .chip {
-    display: inline-block; font-size: 10px; padding: 4px 7px; border: 2px solid var(--linea);
-    background: var(--panel2); margin: 2px 4px 2px 0;
+    font-size: 12px; font-weight: 650; padding: 4px 9px; border-radius: 999px;
+    background: var(--card2); color: var(--tenue);
   }
-  .chip.gol { background: var(--verde2); border-color: var(--verde); color: #eafff2; }
-  .chip.asi { background: #1d4f7a; border-color: var(--cian); color: #dff6ff; }
-  .chip.am { background: #6b5a12; border-color: var(--amar); color: #fff6c2; }
-  .chip.roja { background: #7a2320; border-color: var(--rojo); color: #ffe3e1; }
-  .narra {
-    display: flex; gap: 10px; font-size: 14px; line-height: 1.45; color: #cfd9ee;
-    border-left: 3px solid var(--verde); background: var(--hueco); padding: 8px 10px; margin-bottom: 6px;
-  }
-  .narra.mal { border-left-color: var(--rojo); }
-  .narra b { font-family: var(--mono); font-size: 11px; color: var(--tenue); padding-top: 2px; flex: none; }
+  .chip.gol { background: var(--verde-suave); color: var(--verde); }
+  .chip.am { background: var(--ambar-suave); color: var(--ambar); }
+  .chip.roja { background: var(--rojo-suave); color: var(--rojo); }
+  .min { display: flex; gap: 10px; padding: 9px 0; border-top: 1px solid var(--linea); font-size: 14.5px; }
+  .min b { font-family: var(--num); font-size: 12px; color: var(--tenue); flex: none; padding-top: 2px; min-width: 26px; }
 
-  /* ------------------------------------------------------------------ tabs */
-  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-  .tab { font-size: 10px; padding: 7px 10px; }
-  .tab.on { background: var(--cian); border-color: var(--cian); color: var(--tinta); }
-  #panel { max-height: 620px; overflow: auto; }
+  /* --------------------------------------------------------------- listas */
+  .fila-lista { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--linea); font-size: 14.5px; }
+  .fila-lista:first-of-type { border-top: none; }
+  .fila-lista .pos { font-family: var(--num); font-size: 13px; color: var(--tenue); width: 20px; flex: none; text-align: right; }
+  .fila-lista .nom { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fila-lista .dato { font-family: var(--num); font-size: 13.5px; color: var(--tenue); flex: none; }
+  .fila-lista .dato.fuerte { color: var(--texto); font-weight: 700; }
+  .fila-lista.yo { background: var(--verde-suave); margin: 0 -8px; padding: 10px 8px; border-radius: 8px; border-top-color: transparent; }
+  .fila-lista.yo .nom { font-weight: 700; color: var(--verde); }
+  .zona { width: 3px; align-self: stretch; border-radius: 2px; flex: none; }
+  .zona.sube { background: var(--verde); } .zona.baja { background: var(--rojo); }
 
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th {
-    font-size: 9px; color: var(--tenue); text-align: left; padding: 5px 4px;
-    border-bottom: 2px solid var(--linea); font-weight: 400;
-  }
-  td { padding: 5px 4px; border-bottom: 1px solid rgba(255,255,255,.05); }
-  td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
-  tr.yo td { background: rgba(47,224,122,.13); color: var(--verde); font-weight: 700; }
-  tr.sube td:first-child { box-shadow: inset 3px 0 0 var(--verde); }
-  tr.baja td:first-child { box-shadow: inset 3px 0 0 var(--rojo); }
-  tr.sube td:first-child, tr.baja td:first-child { padding-left: 8px; }
+  .kv { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid var(--linea); font-size: 14.5px; }
+  .kv:first-child { border-top: none; }
+  .kv span { color: var(--tenue); }
+  .kv b { font-family: var(--num); font-weight: 650; }
 
-  .kv { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
-  .kv b { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--texto); }
-  .kv > span { color: var(--tenue); }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+  .barra { margin-bottom: 12px; }
+  .barra .lab { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 5px; }
+  .barra .lab b { font-family: var(--num); }
+  .barra .riel { height: 6px; background: var(--linea); border-radius: 999px; overflow: hidden; }
+  .barra .riel i { display: block; height: 100%; background: var(--verde); border-radius: 999px; }
+  .barra.medio .riel i { background: var(--ambar); }
+  .barra.mal .riel i { background: var(--rojo); }
 
-  /* ------------------------------------------------------------------ feed */
-  .feed { max-height: 300px; overflow: auto; }
-  .feed .it { display: flex; gap: 9px; font-size: 12.5px; line-height: 1.4; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.05); color: #c3cfe6; }
-  .feed .it .t { font-family: var(--mono); font-size: 9px; color: var(--tenue); white-space: nowrap; padding-top: 3px; }
+  .feed .it { display: flex; gap: 9px; padding: 9px 0; border-top: 1px solid var(--linea); font-size: 14px; line-height: 1.4; }
+  .feed .it:first-child { border-top: none; }
+  .feed .t { font-family: var(--num); font-size: 11px; color: var(--tenue); flex: none; padding-top: 2px; }
   .feed .bueno { color: var(--verde); }
   .feed .malo { color: var(--rojo); }
-  .feed .hito { color: var(--amar); font-weight: 700; }
+  .feed .hito { font-weight: 650; }
 
-  /* -------------------------------------------------------------------- fin */
-  .fin { text-align: center; }
-  .fin .grande {
-    font-family: var(--mono); font-size: clamp(24px, 5vw, 44px); line-height: 1.05;
-    text-transform: uppercase; letter-spacing: .04em; color: var(--amar); margin-bottom: 10px;
+  /* ----------------------------------------------------------- navegación */
+  .nav {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    background: var(--card); border-top: 1px solid var(--linea);
+    padding-bottom: env(safe-area-inset-bottom);
   }
-  .fin .grid2 { text-align: left; }
+  .nav .interior { max-width: 560px; margin: 0 auto; display: flex; }
+  .nav button {
+    flex: 1; height: var(--nav-h); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 3px;
+    font-size: 11px; font-weight: 600; color: var(--tenue);
+  }
+  .nav button .ico { font-size: 19px; line-height: 1; }
+  .nav button.on { color: var(--verde); }
+
+  @media (min-width: 760px) {
+    body { padding-bottom: 24px; }
+    .app { max-width: 620px; }
+    .nav {
+      position: sticky; top: 96px; border-top: none; border-bottom: 1px solid var(--linea);
+      background: var(--bg); margin: 0 -14px; padding: 0 14px;
+    }
+    .nav .interior { max-width: none; padding: 0; gap: 4px; }
+    .nav button { height: 46px; flex-direction: row; gap: 7px; font-size: 13.5px; border-radius: 10px; }
+    .nav button.on { background: var(--verde-suave); }
+    .nav button .ico { font-size: 15px; }
+  }
+
+  /* ---------------------------------------------------------------- inicio */
+  .paises { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; max-height: 260px; overflow-y: auto; padding-right: 4px; }
+  .pais { display: flex; align-items: center; gap: 8px; border: 1px solid var(--linea); border-radius: 12px; padding: 10px 12px; font-size: 14px; font-weight: 550; text-align: left; background: var(--card); }
+  .pais.on { border-color: var(--verde); background: var(--verde-suave); color: var(--verde); }
+  .pais .bandera { font-size: 18px; line-height: 1; }
+  .marca { font-size: 30px; font-weight: 800; letter-spacing: -.03em; margin: 22px 0 2px; }
+  .marca span { color: var(--verde); }
+  .lead { color: var(--tenue); margin-bottom: 4px; }
+  .fin-grande { font-size: 27px; font-weight: 800; line-height: 1.15; margin-bottom: 8px; }
 </style>
 </head>
 <body>
-<div class="marco">
-  <header class="top">
-    <div>
-      <div id="logo"></div>
-      <p class="bajada">Empiezas a los 16 en la última cancha de la última liga. Terminas donde alcances: crack, millonario, o el técnico que nadie quería.</p>
-    </div>
-    <div class="der" id="acciones-top"></div>
-  </header>
+  <div class="app">
+    <header class="top" id="top" hidden></header>
+    <!-- En el teléfono la navegación es fija abajo (sale del flujo); en
+         pantalla grande se queda acá, justo debajo de la cabecera. -->
+    <nav class="nav" id="nav" hidden><div class="interior"></div></nav>
+    <main id="pantalla"></main>
+  </div>
 
-  <section id="inicio" class="panel">
-    <h2 class="titulito">Ficha de inscripción</h2>
-    <div class="inicio-grid">
-      <div>
-        <label class="lab" for="nom">Tu nombre</label>
-        <input id="nom" maxlength="24" placeholder="Ponte un nombre" value="">
-        <div style="height:14px"></div>
-        <span class="lab">Puesto</span>
-        <div class="pos-sel" id="pos-sel"></div>
-        <div style="height:14px"></div>
-        <label class="lab" for="seed">Semilla (déjala vacía y sale una carrera al azar)</label>
-        <input id="seed" placeholder="ej: 1907" inputmode="numeric">
-      </div>
-      <div>
-        <span class="lab">Perfil</span>
-        <div class="perfiles" id="perfiles"></div>
-        <p class="mini" style="margin:12px 0">Tu techo es secreto: lo vas descubriendo entrenando. Dos carreras con el mismo perfil no se parecen en nada.</p>
-        <button id="empezar" class="pri" style="width:100%;font-size:14px;padding:14px">Firmar y empezar</button>
-      </div>
-    </div>
-  </section>
-
-  <main id="juego" hidden>
-    <div class="hud" id="hud"></div>
-    <div class="tablero">
-      <aside>
-        <div class="panel ficha" id="ficha"></div>
-        <div class="panel" id="stats"></div>
-        <div class="panel feed" id="feed"></div>
-      </aside>
-      <section>
-        <div class="pantalla" id="decision"></div>
-        <nav class="tabs" id="tabs"></nav>
-        <div class="panel" id="panel"></div>
-      </section>
-    </div>
-  </main>
-</div>
-
-<script src="data.js"></script>
-<script src="engine.js"></script>
-<script src="career.js"></script>
-<script src="escudos.js"></script>
-<script src="app.js"></script>
+  <script src="mundo.js"></script>
+  <script src="data.js"></script>
+  <script src="engine.js"></script>
+  <script src="career.js"></script>
+  <script src="camisetas.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

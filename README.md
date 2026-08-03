@@ -4,9 +4,9 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![dependencies](https://img.shields.io/badge/dependencies-none-brightgreen.svg)
 
-Un modo carrera de fútbol que empieza a los 16 años en la peor cancha de la
-Copa Perú y termina, si aguantas, contigo sentado en un banco de suplentes
-dirigiendo a otros.
+Un modo carrera de fútbol que empieza a los 16 años en la última categoría del
+país que elijas y termina, si aguantas, contigo sentado en un banco de
+suplentes dirigiendo a otros.
 
 Es la idea del modo carrera de siempre —creas un jugador, entrenas, juegas, te
 transfieres— pero con todo lo que esos juegos dejan afuera: el sueldo real
@@ -23,16 +23,28 @@ que decidir si pagas el curso de entrenador con lo que juntaste.
 **[jp7599.github.io/potrero](https://jp7599.github.io/potrero/)** — o abre
 `docs/index.html`. No hay build, no hay servidor, no hay dependencias.
 
-Eliges nombre, puesto y perfil (crack de barrio, obrero, cerebro, killer del
-área) y arrancas desde abajo del todo. A partir de ahí cada semana es una
+Eliges nombre, país, puesto y perfil (crack de barrio, obrero, cerebro, killer
+del área) y arrancas desde abajo del todo. A partir de ahí cada semana es una
 decisión, y hay 42 semanas por temporada.
+
+Si el semana a semana te resulta largo, hay tres ritmos —Intenso, Normal y
+Exprés— que cambian **en qué te detienes**, no cómo se simula: la misma carrera
+con la misma semilla da exactamente lo mismo en los tres.
 
 ## Qué hay adentro
 
-**Una pirámide de seis categorías y 72 clubes.** Copa Perú, Segunda, Primera,
-Liga Sudamericana, Liga Continental y La Élite, con ascensos y descensos de
-verdad: los dos últimos bajan, los dos primeros suben, tu club incluido. Nadie
-te regala el salto de categoría; hay que ganárselo o esperar a que te compren.
+**36 países, 108 ligas, 1.287 clubes reales.** Todo Sudamérica, México, Estados
+Unidos, Canadá, Costa Rica y veintidós países de Europa, cada uno con sus tres
+categorías y su nombre real: Liga 1 y Copa Perú, Brasileirão y Série C, LaLiga,
+Premier League, Serie A, Bundesliga. Los nombres y las ciudades salen de
+[openfootball](https://github.com/openfootball/clubs) (dominio público, CC0);
+las primeras divisiones de Sudamérica, las cinco grandes de Europa, Portugal,
+Países Bajos, México y MLS están curadas a mano con su prestigio y su camiseta.
+
+**Empiezas donde nadie te ve.** La tercera categoría de tu país son clubes de
+barrio inventados sobre ciudades reales, distintos en cada carrera. De ahí se
+sube por ascensos —los dos últimos bajan, los dos primeros suben, tu club
+incluido— y por fichajes hacia ligas más fuertes del mundo.
 
 **Dos formas de empezar.** Firmar en un club de la Copa Perú y jugar desde el
 primer fin de semana en canchas de tierra, o entrar a la cantera de un club de
@@ -40,13 +52,18 @@ Primera: sueldo de mentira y reserva todos los sábados, pero entrenas el doble
 y si rindes te suben al primer equipo. Si a los 20 no subiste, te dan la carta
 de libertad y vuelves a empezar más abajo.
 
-**Cada club con su escudo.** Los 72 escudos son pixel art generado por código
-—forma, patrón, colores e iniciales salen del nombre del club—, así que no hay
-ni una imagen en el repositorio y el mismo club siempre tiene el mismo escudo.
+**Cada club con su camiseta.** Los escudos reales son marca registrada y no se
+reproducen acá; lo que sí se reconoce al toque son los colores: la banda de
+Boca, la cruzada de River, el rayado de Peñarol, el blaugrana, los aros del
+Flamengo. Cada camiseta es un SVG dibujado por código, así que no hay ni una
+imagen en el repositorio y escala igual a 22px en una tabla que a 60px en la
+cabecera.
 
 **El mundo entero juega.** Todas las categorías corren su liga de ida y vuelta,
-su copa nacional por eliminación y, las de arriba, la copa internacional con
-fase de grupos, semis y final. El mundo sigue girando juegues o no.
+su copa nacional por eliminación y, las de arriba, la Libertadores, la Champions
+o la Concacaf Champions Cup. El mundo sigue girando juegues o no: solo la liga
+donde estás metido tiene jugadores uno por uno, el resto se simula a nivel club
+para que mil clubes entren en el navegador sin llenarte el disco.
 
 **La semana.** Entrenas técnica, gimnasio o video, descansas, haces
 fisioterapia, sales en la prensa, sales de noche, ves a tu familia, estudias
@@ -120,7 +137,14 @@ Cualquier parecido con la realidad es culpa del fútbol.
 
 La partida se guarda sola en el navegador. Como `localStorage` no siempre
 funciona abriendo el archivo directo desde el disco, hay botones de Exportar e
-Importar para llevarte la carrera en un archivo.
+Importar para llevarte la carrera en un archivo. Las partidas de la v0.1 no
+cargan: el mundo cambió entero.
 
-MIT. Sin dependencias, sin build, sin assets: cinco archivos de JavaScript y un
+Los nombres de clubes y ciudades vienen de
+[openfootball/clubs](https://github.com/openfootball/clubs), publicado bajo CC0
+(dominio público). El resto —camisetas, prestigios, economía y todo el juego—
+es de acá. `scripts/` tiene los generadores que arman `docs/mundo.js`, por si
+hay que rehacerlo.
+
+MIT. Sin dependencias, sin build, sin assets: seis archivos de JavaScript y un
 HTML.

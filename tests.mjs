@@ -58,11 +58,11 @@ console.log("\nmotor: azar y jugadores");
   const gs = Array.from({ length: 8000 }, () => E.poisson(r, lam));
   ok(cerca(gs.reduce((x, y) => x + y, 0) / gs.length, lam, 0.08), "poisson tiene media λ");
 
-  const p = E.genPlayer(r, { pos: "DC", age: 22, target: 70, region: "sud", clubId: 0, leagueId: "pe" });
+  const p = E.genPlayer(r, { pos: "DC", age: 22, target: 70, region: "sud", clubId: 0, leagueId: "pe1" });
   /* genPlayer mete ruido a propósito (dos jugadores del mismo club no son
    * iguales), así que lo que tiene que dar es el promedio, no cada tirada. */
   const muestras = Array.from({ length: 2000 }, () =>
-    E.media(E.genPlayer(r, { pos: "DC", age: 22, target: 70, region: "sud", clubId: 0, leagueId: "pe" })));
+    E.media(E.genPlayer(r, { pos: "DC", age: 22, target: 70, region: "sud", clubId: 0, leagueId: "pe1" })));
   const prom = muestras.reduce((x, y) => x + y, 0) / muestras.length;
   ok(cerca(prom, 70, 0.4), `genPlayer centra la media donde se le pide (${prom.toFixed(2)})`);
   ok(muestras.every((v) => Math.abs(v - 70) < 20), "y el ruido no se va de mambo");
@@ -72,14 +72,14 @@ console.log("\nmotor: azar y jugadores");
 
 console.log("\nmotor: plata");
 {
-  const club = { leagueId: "eu1", prestige: 90 };
-  const chico = { leagueId: "pe", prestige: 25 };
+  const club = { leagueId: "es1", prestige: 90 };
+  const chico = { leagueId: "pe1", prestige: 25 };
   ok(E.wageFor(club, 80, 26) > E.wageFor(club, 70, 26), "más media, más sueldo");
   ok(E.wageFor(club, 75, 26) > E.wageFor(chico, 75, 26), "el mismo jugador cobra más en la élite");
   ok(E.wageFor(chico, 40, 19) >= 40, "hay un sueldo mínimo");
   const distrital = { leagueId: "pe3", prestige: 8 };
   ok(E.wageFor(distrital, 45, 18) < E.wageFor(chico, 45, 18), "en la Copa Perú se cobra menos que en Segunda");
-  ok(E.wageFor({ leagueId: "eu1", prestige: 95 }, 88, 26) > 100 * E.wageFor(distrital, 45, 18), "de la tierra a la élite hay dos órdenes de magnitud");
+  ok(E.wageFor({ leagueId: "es1", prestige: 95 }, 88, 26) > 100 * E.wageFor(distrital, 45, 18), "de la tierra a la élite hay dos órdenes de magnitud");
   const joven = { pos: "DC", age: 21, attrs: { rit: 80, tir: 80, pas: 70, reg: 78, def: 40, fis: 75, men: 70 }, pot: 92 };
   const viejo = { ...joven, age: 34, pot: 80 };
   ok(E.valueOf(joven) > E.valueOf(viejo) * 3, "un pibe con proyección vale mucho más que un veterano igual");
@@ -135,14 +135,14 @@ console.log("\nmotor: partidos");
 console.log("\nmotor: progresión");
 {
   const r = E.makeRng(11);
-  const p = E.genPlayer(r, { pos: "MC", age: 18, target: 55, region: "sud", clubId: 0, leagueId: "pe" });
+  const p = E.genPlayer(r, { pos: "MC", age: 18, target: 55, region: "sud", clubId: 0, leagueId: "pe1" });
   p.pot = 85;
   const antes = E.media(p);
   for (let i = 0; i < 40; i++) E.train(r, p, ["pas", "reg", "tir"], 1, 1);
   ok(E.media(p) > antes, `entrenar mejora (${antes} → ${E.media(p)})`);
   ok(Object.values(p.attrs).every((v) => v <= 99), "el entrenamiento no rompe el techo de 99");
 
-  const techo = E.genPlayer(r, { pos: "MC", age: 27, target: 70, region: "sud", clubId: 0, leagueId: "pe" });
+  const techo = E.genPlayer(r, { pos: "MC", age: 27, target: 70, region: "sud", clubId: 0, leagueId: "pe1" });
   techo.pot = E.media(techo);
   const m0 = E.media(techo);
   for (let i = 0; i < 60; i++) E.train(r, techo, ["pas"], 1, 1);
@@ -176,7 +176,17 @@ console.log("\ncarrera: mundo íntegro");
   ok(huecos === 0, "ningún plantel apunta a un jugador que no existe");
   ok(desalineados === 0, "el id de cada jugador sigue siendo su índice");
   ok(duplicados === 0, "nadie está en dos clubes a la vez");
-  ok(s.clubs.every((c) => c.squad.length >= 16), "todos los clubes mantienen plantel completo");
+  /* Solo la liga donde estás vive con jugadores; el resto del mundo corre en
+   * abstracto para que el save no pese megas. */
+  const foco = s.clubs.filter((c) => c.leagueId === s.ligaFoco);
+  ok(foco.length >= 2 && foco.every((c) => c.squad.length >= 16),
+     `los clubes de tu liga mantienen plantel completo (${foco.length} clubes)`);
+  /* Lo que importa no es que ninguna otra liga tenga un jugador suelto (el
+   * mercado mueve gente), sino que el mundo no crezca sin techo: con más de
+   * mil clubes, generarle plantel a todos llenaría el localStorage. */
+  const vivos = s.players.filter(Boolean).length;
+  ok(vivos < 1500, `el mundo se mantiene acotado después de la carrera entera (${vivos} jugadores)`);
+  ok(C.guardar(s).length < 2.5e6, `y el guardado entra en el navegador (${(C.guardar(s).length / 1024).toFixed(0)}KB)`);
 }
 
 console.log("\ncarrera: la tabla cierra");
@@ -192,8 +202,13 @@ console.log("\ncarrera: la tabla cierra");
   const tabla = s.me.tablaFinal || null;
   const hist = s.me.hist[0];
   ok(hist && hist.temporada === 1, "quedó registrada la primera temporada");
-  ok(hist.pos >= 1 && hist.pos <= 12, `tu equipo terminó en una posición válida (${hist && hist.pos}º)`);
-  ok(D.LEAGUES.length === 6 && D.CLUBS.length === 72, "la pirámide tiene seis categorías y 72 clubes");
+  ok(hist.pos >= 1 && hist.pos <= 18, `tu equipo terminó en una posición válida (${hist && hist.pos}º)`);
+  ok(D.LEAGUES.length >= 100 && D.CLUBS.length >= 1200,
+     `el mundo trae ${D.PAISES.length} países, ${D.LEAGUES.length} ligas y ${D.CLUBS.length} clubes reales`);
+  ok(D.PAISES.every((p) => D.LEAGUES.filter((l) => l.pais === p.cod).length === 3),
+     "cada país tiene sus tres categorías");
+  ok(D.CLUBS.every((c) => /^#[0-9a-f]{6}$/i.test(c[5]) && /^#[0-9a-f]{6}$/i.test(c[6])),
+     "todos los clubes traen los dos colores de su camiseta");
 }
 
 console.log("\ncarrera: tablas consistentes durante la temporada");
@@ -203,6 +218,7 @@ console.log("\ncarrera: tablas consistentes durante la temporada");
       if (st.semana !== 20 || st.chequeado) return;
       st.chequeado = true;
       for (const l of D.LEAGUES) {
+        if (!st.comp.ligas[l.id]) continue;   // las categorías de barrio de otros países no existen
         const t = st.comp.ligas[l.id].tabla;
         const gf = t.reduce((a, r) => a + r.gf, 0), gc = t.reduce((a, r) => a + r.gc, 0);
         const pjs = t.reduce((a, r) => a + r.pj, 0);
@@ -212,7 +228,7 @@ console.log("\ncarrera: tablas consistentes durante la temporada");
     },
   });
   const chk = s.chk || [];
-  ok(chk.length === D.LEAGUES.length, `se auditaron todas las ligas a mitad de temporada (${chk.length})`);
+  ok(chk.length > 60, `se auditaron todas las ligas vivas a mitad de temporada (${chk.length})`);
   ok(chk.every((c) => c.gf === c.gc), "goles a favor = goles en contra en cada liga");
   ok(chk.every((c) => c.pjs % 2 === 0), "los partidos jugados siempre son pares");
   ok(chk.every((c) => c.sumaOk), "ganados + empatados + perdidos = jugados");

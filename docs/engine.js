@@ -98,13 +98,17 @@
   }
 
   /* --------------------------------------------------------------- dinero */
-  const TIER_WAGE = { 0: 95, 1: 240, 2: 620, 3: 3200, 4: 14000, 5: 34000 };
+  /* Sueldo semanal de referencia por nivel de liga (0 = barrio, 9 = LaLiga o
+   * Premier). La escala es exponencial a propósito: subir un escalón de mundo
+   * tiene que sentirse en el bolsillo. */
+  const TIER_WAGE = { 0: 95, 1: 240, 2: 620, 3: 1600, 4: 3200, 5: 7000, 6: 14000, 7: 26000, 8: 45000, 9: 75000 };
 
   /* El sueldo se mide contra el nivel de la propia liga, no contra una media
    * absoluta: el mejor de la Copa Perú sigue cobrando como amateur, y en la
    * élite la diferencia entre ser del montón y ser figura es exponencial. */
   function wageFor(club, m, age) {
-    const tier = D.LEAGUES.find((l) => l.id === club.leagueId).tier;
+    const liga = D.LEAGUES.find((l) => l.id === club.leagueId);
+    const tier = liga ? liga.tier : 0;
     const pres = 0.55 + (club.prestige / 100) * 0.95;
     const mf = clamp(Math.exp((m - mediaObjetivo(club.prestige)) / 9), 0.25, 9);
     const af = age < 20 ? 0.55 : age < 23 ? 0.8 : age > 33 ? 0.75 : 1;
@@ -121,43 +125,80 @@
   }
 
   /* ---------------------------------------------------------------- mundo */
-  function buildWorld(seed) {
+  /* El mundo tiene más de mil clubes. Generarle dieciocho jugadores a cada uno
+   * llenaría el archivo de guardado de gente que nadie va a mirar nunca, así
+   * que por defecto los clubes son abstractos: solo prestigio y forma, que
+   * alcanzan para simular su liga. El plantel se materializa cuando entrás a
+   * esa liga, y se descarta cuando te vas. */
+  /* La fila del club trae la camiseta aplanada para que mundo.js pese poco:
+   * [.., patrón, color1, color2, "n=9", "trim=#fff"]. */
+  function kitDe(fila) {
+    const k = { pat: fila[4], c1: fila[5], c2: fila[6] };
+    for (let i = 7; i < fila.length; i++) {
+      const par = String(fila[i]).split("=");
+      k[par[0]] = /^\d+$/.test(par[1]) ? +par[1] : par[1];
+    }
+    return k;
+  }
+
+  function buildWorld(seed, focus) {
     _pid = 1;
     const rng = makeRng(seed);
     const clubs = D.CLUBS.map((c, i) => ({
       id: i, leagueId: c[0], name: c[1], city: c[2], prestige: c[3],
-      colors: [c[4], c[5]], squad: [], form: 0,
+      kit: kitDe(c), colors: [c[5], c[6]], squad: [], form: 0,
       titulos: { liga: 0, copa: 0, cont: 0 },
     }));
-    const players = [null]; // índice 0 reservado para ti
-    for (const club of clubs) {
-      const league = D.LEAGUES.find((l) => l.id === club.leagueId);
+    const state = { clubs, players: [null], rngState: rng.state };  // índice 0: vos
+    for (const id of focus || []) materializarLiga(state, id);
+    return state;
+  }
+
+  /* Le da plantel a todos los clubes de una liga que todavía no lo tengan. */
+  function materializarLiga(state, leagueId) {
+    const rng = makeRng(state.rngState);
+    const league = D.LEAGUES.find((l) => l.id === leagueId);
+    if (!league) return;
+    for (const club of state.clubs) {
+      if (club.leagueId !== leagueId || club.squad.length) continue;
       const target = mediaObjetivo(club.prestige);
       for (const pos of D.SQUAD_SHAPE) {
         const age = rng.int(18, 34);
         const q = target + (age < 21 ? -6 : age > 32 ? -3 : 0) + rng.gauss(0, 2.5);
         const p = genPlayer(rng, {
           pos, age, target: q, clubId: club.id, leagueId: club.leagueId,
-          region: league.region === "eur" ? (rng.chance(0.25) ? "sud" : "eur") : "sud",
+          region: league.region === "uefa" ? (rng.chance(0.25) ? "sud" : "eur") : "sud",
         });
         p.wage = wageFor(club, media(p), p.age);
         /* El id ES el índice del array. Invariante que los tests verifican:
          * sin esto, un jugador nuevo pisa el hueco de un retirado. */
-        p.id = players.length;
-        players.push(p);
+        p.id = state.players.length;
+        state.players.push(p);
         club.squad.push(p.id);
       }
     }
-    return { clubs, players, rngState: rng.state };
+    state.rngState = rng.state;
   }
 
-  /* Fuerza de un club: los 11 mejores + un plus por infraestructura. */
+  /* Suelta el plantel de una liga que dejaste atrás. Los huecos quedan en null
+   * para no mover ningún índice: el id sigue siendo la posición del array. */
+  function soltarLiga(state, leagueId, proteger) {
+    for (const club of state.clubs) {
+      if (club.leagueId !== leagueId || club.id === proteger) continue;
+      for (const pid of club.squad) if (pid !== 0) state.players[pid] = null;
+      club.squad = club.squad.filter((pid) => pid === 0);
+    }
+  }
+
+  /* Fuerza de un club: los 11 mejores + un plus por infraestructura. Los clubes
+   * sin plantel se estiman desde el prestigio, en la misma escala, para que un
+   * rival abstracto y uno materializado se midan igual. */
   function clubRating(state, clubId, opts = {}) {
     const club = state.clubs[clubId];
     const ps = club.squad.map((id) => state.players[id])
       .filter((p) => p && (!p.inj || opts.ignoreInj) && p.id !== opts.without);
+    if (ps.length < 11) return mediaObjetivo(club.prestige) * 0.86 + club.prestige * 0.145 + club.form * 0.5;
     const ms = ps.map((p) => media(p) + (p.fit - 92) * 0.08 + p.form * 0.8).sort((a, b) => b - a).slice(0, 11);
-    if (!ms.length) return 40;
     const avg = sum(ms) / ms.length;
     return avg * 0.86 + club.prestige * 0.145 + club.form * 0.5;
   }
@@ -325,7 +366,7 @@
 
   const Exported = {
     clamp, r1, sum, makeRng, poisson, media, nombre, mediaObjetivo, genPlayer,
-    wageFor, valueOf, buildWorld, clubRating, simMatch, roundRobin, makeSchedule,
+    wageFor, valueOf, buildWorld, kitDe, materializarLiga, soltarLiga, clubRating, simMatch, roundRobin, makeSchedule,
     emptyRow, applyResult, sortTable, ageMult, train, declive, injuryRoll, lambdas, simTiempo,
     perfRoll, ratingFrom, minutosFor, investTick, TIER_WAGE,
   };

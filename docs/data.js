@@ -6,101 +6,39 @@
  * data pura, sin lógica: el motor lo consume, los tests lo verifican.
  */
 (function (global) {
-  /* ---------------------------------------------------------------- ligas
-   * La pirámide: se empieza en una cancha de tierra de la Copa Perú y, si el
-   * fútbol te da, se termina en la élite europea. `sube`/`baja` arman los
-   * ascensos y descensos de verdad: los dos últimos se van, los dos primeros
-   * de abajo suben, y eso incluye a tu club. */
-  const LEAGUES = [
-    { id: "pe3", name: "Copa Perú",           short: "COPA PERÚ", region: "sud", tier: 0, tax: 0.10, cup: "Copa Distrital",   cont: null,     sube: "pe2" },
-    { id: "pe2", name: "Segunda División",    short: "SEGUNDA",   region: "sud", tier: 1, tax: 0.20, cup: "Copa Federación",  cont: null,     sube: "pe", baja: "pe3" },
-    { id: "pe",  name: "Primera División",    short: "PRIMERA",   region: "sud", tier: 2, tax: 0.30, cup: "Copa Nacional",    cont: "condor", baja: "pe2" },
-    { id: "sa",  name: "Liga Sudamericana",   short: "SUDAMÉR.",  region: "sud", tier: 3, tax: 0.28, cup: "Copa del Sur",     cont: "condor" },
-    { id: "eu2", name: "Liga Continental",    short: "CONTIN.",   region: "eur", tier: 4, tax: 0.40, cup: "Copa Continental", cont: "europa" },
-    { id: "eu1", name: "La Élite",            short: "ÉLITE",     region: "eur", tier: 5, tax: 0.45, cup: "Copa de la Élite", cont: "europa" },
-  ];
+  /* ---------------------------------------------------------------- mundo
+   * Las ligas y los clubes ya no viven acá: los trae mundo.js, generado desde
+   * openfootball (dominio público, CC0) más las primeras divisiones curadas a
+   * mano. Este archivo se queda con lo que es puramente de juego: puestos,
+   * acciones de la semana, momentos de partido y eventos de vida. */
+  if (typeof require !== "undefined" && !global.PotreroMundo) require("./mundo.js");
+  const M = global.PotreroMundo;
+  const PAISES = M.PAISES;
 
-  /* prestigio 0-100 manda todo: nivel de plantilla, sueldos, presupuesto. */
-  const CLUBS = [
-    // Copa Perú — canchas de tierra, arcos sin red, la liga donde empiezas
-    ["pe3", "Unión Santa Rosa",    "Ate",        12, "#c8352a", "#f2e9d0"],
-    ["pe3", "Estrella de Villa",   "Villa",      11, "#e8b100", "#1a1a1a"],
-    ["pe3", "Defensor San Juan",   "Lima",       10, "#1f6fbf", "#ffffff"],
-    ["pe3", "Atlético Comas",      "Comas",       9, "#2a8f4f", "#f4f4f2"],
-    ["pe3", "Juventud Ventanilla", "Callao",      9, "#7a3fb5", "#f0e9d2"],
-    ["pe3", "Los Olivos FC",       "Lima",        8, "#e2762a", "#2b2b2b"],
-    ["pe3", "Sport Cañete",        "Cañete",      8, "#0f8f8a", "#ffffff"],
-    ["pe3", "Unión Huaral",        "Huaral",      7, "#d4202a", "#1a3a6a"],
-    ["pe3", "Estrella Roja",       "Puno",        7, "#a8202a", "#f2f2f2"],
-    ["pe3", "Cultural Ayacucho",   "Ayacucho",    6, "#3a5f8f", "#e8d4a0"],
-    ["pe3", "Sport Chanchamayo",   "Chanchamayo", 5, "#5f8f2a", "#f4f4f2"],
-    ["pe3", "Racing de Tarma",     "Tarma",       4, "#1a1a1a", "#e8b100"],
-    // Segunda División — ya hay contratos de verdad, y pasto
-    ["pe2", "Deportivo Chiclayo",  "Chiclayo",   23, "#1b52a8", "#f4f4f2"],
-    ["pe2", "Atlético Juliaca",    "Juliaca",    22, "#c8202a", "#1a1a1a"],
-    ["pe2", "Unión Tacna",         "Tacna",      21, "#0f7a4a", "#f0e9d2"],
-    ["pe2", "Deportivo Ica",       "Ica",        20, "#e8b100", "#8a3f28"],
-    ["pe2", "Sport Huánuco",       "Huánuco",    19, "#7a2a8f", "#ffffff"],
-    ["pe2", "Universidad Chimbote","Chimbote",   18, "#1a9bd7", "#1a1a3a"],
-    ["pe2", "Defensor Moquegua",   "Moquegua",   17, "#b2593a", "#f2e9d0"],
-    ["pe2", "Sport Pucallpa",      "Pucallpa",   16, "#0f8f4c", "#e8b100"],
-    ["pe2", "Unión Cajamarca",     "Cajamarca",  15, "#2b2b6e", "#f4f4f2"],
-    ["pe2", "Atlético Huaraz",     "Huaraz",     14, "#e2432a", "#ffffff"],
-    ["pe2", "Sport Tumbes",        "Tumbes",     13, "#f0c93b", "#1f6fbf"],
-    ["pe2", "Deportivo Talara",    "Talara",     13, "#1a1a1a", "#e2762a"],
-    // Primera División — la vitrina: acá te empiezan a ver de afuera
-    ["pe", "Atlético Miraflores", "Lima",       46, "#12358c", "#f4f4f2"],
-    ["pe", "Cóndor del Cusco",    "Cusco",      42, "#8c1230", "#f0c93b"],
-    ["pe", "Deportivo Callao",    "Callao",     40, "#e23b2e", "#1a1a1a"],
-    ["pe", "Sporting Rímac",      "Lima",       38, "#0f7a4a", "#ffffff"],
-    ["pe", "Misti de Arequipa",   "Arequipa",   34, "#f0f0ee", "#b0202a"],
-    ["pe", "Real Chorrillos",     "Lima",       33, "#2b2b6e", "#e8b100"],
-    ["pe", "Andino de Huancayo",  "Huancayo",   31, "#e8442a", "#f2e9d0"],
-    ["pe", "Amazonas de Iquitos", "Iquitos",    29, "#0b8f6a", "#f2e9d0"],
-    ["pe", "Ferroviario",         "Trujillo",   28, "#3a3f47", "#d8d2c4"],
-    ["pe", "Pacífico de Piura",   "Piura",      26, "#1a9bd7", "#ffffff"],
-    ["pe", "Racing de Barranco",  "Lima",       28, "#6a3fb5", "#f2f2f2"],
-    ["pe", "Juventud de Ate",     "Lima",       26, "#c8a02c", "#232323"],
-    // Sudamérica — el salto que todo canterano sueña
-    ["sa", "Atlético del Plata",  "Buenos Aires", 71, "#1b3fae", "#f4c521"],
-    ["sa", "Estrela do Rio",      "Río",          69, "#d21f26", "#1a1a1a"],
-    ["sa", "Guaraná Paulista",    "São Paulo",    67, "#0f8f4c", "#ffffff"],
-    ["sa", "Verde de Belo",       "Belo Horizonte", 62, "#0a6b3d", "#f0e9d2"],
-    ["sa", "Racing del Sur",      "Avellaneda",   61, "#5fb8e8", "#ffffff"],
-    ["sa", "Cafetero de Bogotá",  "Bogotá",       58, "#e8b21a", "#1a3a8f"],
-    ["sa", "Sur de Rosario",      "Rosario",      56, "#1f1f1f", "#e2c000"],
-    ["sa", "Nacional del Este",   "Montevideo",   55, "#f2f2f2", "#2a4fbf"],
-    ["sa", "Andes de Santiago",   "Santiago",     53, "#2a3d8f", "#e23b2e"],
-    ["sa", "Yaguareté",           "Asunción",     51, "#e2761a", "#2b2b2b"],
-    ["sa", "Altiplano",           "La Paz",       49, "#0f9b8e", "#f4f4f2"],
-    ["sa", "Litoral",             "Guayaquil",    47, "#f0c93b", "#1a6fc9"],
-    // Europa, segundo escalón
-    ["eu2", "Porto Douro",        "Oporto",       76, "#1a4fa0", "#ffffff"],
-    ["eu2", "Amstel FC",          "Ámsterdam",    74, "#e2432a", "#f4f4f2"],
-    ["eu2", "Lisboa Tejo",        "Lisboa",       72, "#0f7a4a", "#e8b100"],
-    ["eu2", "Estambul Bósforo",   "Estambul",     70, "#d4202a", "#f2f2f2"],
-    ["eu2", "Salzburgo Rojo",     "Salzburgo",    68, "#c81f2a", "#1a1a1a"],
-    ["eu2", "Bruselas Real",      "Bruselas",     66, "#5a2d8f", "#f0f0ee"],
-    ["eu2", "Kyiv Dniéper",       "Kyiv",         65, "#e8b100", "#1b3fae"],
-    ["eu2", "Praga Vltava",       "Praga",        63, "#8f1f2a", "#e2e2e0"],
-    ["eu2", "Atenas Egeo",        "Atenas",       62, "#1a7fd4", "#ffffff"],
-    ["eu2", "Zagreb Azul",        "Zagreb",       61, "#2a4fbf", "#f2f2f2"],
-    ["eu2", "Berna Alpes",        "Berna",        60, "#e2e2e0", "#c8202a"],
-    ["eu2", "Copenhague Norte",   "Copenhague",   59, "#1a1a3a", "#8fd4e8"],
-    // La Élite
-    ["eu1", "Real Castilla",      "Madrid",       95, "#f4f4f2", "#c8a02c"],
-    ["eu1", "Barcino FC",         "Barcelona",    93, "#8f1f4a", "#1b3fae"],
-    ["eu1", "Rhein München",      "Múnich",       92, "#c8202a", "#f4f4f2"],
-    ["eu1", "Albión United",      "Londres",      91, "#d4202a", "#f0e9d2"],
-    ["eu1", "París Luz",          "París",        90, "#1a1a3a", "#e2432a"],
-    ["eu1", "Northgate FC",       "Mánchester",   89, "#1a5fd4", "#f2f2f2"],
-    ["eu1", "Támesis Azul",       "Londres",      87, "#0a3f9c", "#ffffff"],
-    ["eu1", "Milano Nero",        "Milán",        86, "#1a1a1a", "#c8202a"],
-    ["eu1", "Piamonte",           "Turín",        85, "#f2f2f2", "#1a1a1a"],
-    ["eu1", "Ruhr Amarillo",      "Dortmund",     83, "#f0d000", "#1a1a1a"],
-    ["eu1", "Lupa Roma",          "Roma",         81, "#8f1f2a", "#e8b100"],
-    ["eu1", "Marsella Puerto",    "Marsella",     79, "#7fd4e8", "#f4f4f2"],
-  ];
+  /* Impuesto sobre el sueldo, por país; lo que falta usa el de su
+   * confederación. No es una tabla fiscal: es una perilla de juego que hace
+   * que irse a Inglaterra por el doble no sea automáticamente el doble. */
+  const TAX_CONF = { conmebol: 0.28, concacaf: 0.32, uefa: 0.40 };
+  const TAX = {
+    pe: 0.30, ar: 0.35, br: 0.27, cl: 0.30, co: 0.33, uy: 0.30, ec: 0.25,
+    py: 0.10, bo: 0.13, ve: 0.34, mx: 0.30, us: 0.37, ca: 0.33, cr: 0.25,
+    es: 0.45, eng: 0.45, it: 0.43, de: 0.42, fr: 0.45, pt: 0.28, nl: 0.49,
+    be: 0.50, tr: 0.35, sco: 0.45, gr: 0.44, ru: 0.13, ua: 0.19, hr: 0.30,
+    rs: 0.20, at: 0.48, ch: 0.25, dk: 0.52, se: 0.52, no: 0.47, pl: 0.32, cz: 0.23,
+  };
+  const NOMBRE_PAIS = {};
+  PAISES.forEach((p) => { NOMBRE_PAIS[p.cod] = p.nombre; });
+
+  const LEAGUES = M.LIGAS.map((l) => ({
+    id: l.id, name: l.name, pais: l.pais, div: l.div,
+    short: (NOMBRE_PAIS[l.pais] + " " + l.div).toUpperCase(),
+    region: l.region, tier: l.tier,
+    tax: TAX[l.pais] != null ? TAX[l.pais] : TAX_CONF[l.region],
+    cup: l.cup, cont: l.cont, sube: l.sube, baja: l.baja,
+  }));
+  /* [liga, nombre, ciudad, prestigio, patrón, color1, color2, ...extras] */
+  const CLUBS = M.CLUBS;
+  const CONTINENTALES = M.CONTINENTALES;
 
   /* --------------------------------------------------------- posiciones */
   /* Pesos con los que cada puesto convierte atributos en media. */
@@ -381,7 +319,7 @@
   ];
 
   const Exported = {
-    LEAGUES, CLUBS, POSITIONS, POS_LIST, SHARE, SQUAD_SHAPE, NAMES, CITY_NICK,
+    LEAGUES, CLUBS, PAISES, CONTINENTALES, POSITIONS, POS_LIST, SHARE, SQUAD_SHAPE, NAMES, CITY_NICK,
     SPONSORS, INVESTMENTS, ACTIONS, LIFESTYLE, MOMENTS, EVENTOS,
     FORMATIONS, STYLES, MENTALITIES, PRENSA, OBJETIVOS, LESIONES,
   };

@@ -711,13 +711,21 @@
     }
   }
 
-  function simRondaCopa(s, r) {
-    const miClub = clubReservado(s);
+  /* `incluirMio` solo se usa al rematar las copas en el cierre de temporada:
+   * durante el año tu llave se juega aparte, con su pantalla. */
+  function simRondaCopa(s, r, incluirMio) {
+    const miClub = incluirMio ? -1 : clubReservado(s);
     for (const l of D.LEAGUES) {
       const C = s.comp.copa[l.id];
       if (!C) continue;
       const ronda = C.llaves.rondas[C.ronda];
       if (!ronda || C.campeon) continue;
+      /* Una ronda se juega una sola vez. Si caen dos semanas de copa antes de
+       * cerrarla, los ganadores se apilaban de nuevo y la ronda siguiente salía
+       * con un club emparejado contra nadie. */
+      C.simuladas = C.simuladas || {};
+      if (C.simuladas[C.ronda]) continue;
+      C.simuladas[C.ronda] = 1;
       C.ganadores = C.ganadores || [];
       for (const par of ronda) {
         if (par[0] === miClub || par[1] === miClub) continue;
@@ -732,6 +740,10 @@
     for (const l of D.LEAGUES) {
       const C = s.comp.copa[l.id];
       if (!C || C.campeon) continue;
+      /* Una ronda solo se cierra si de verdad se jugó. Sin esto, un segundo
+       * avance sobre la misma ronda se comía los ganadores y la copa quedaba
+       * dando vueltas sin campeón hasta el final de la temporada. */
+      if (C.llaves.rondas[C.ronda] && !(C.simuladas || {})[C.ronda]) continue;
       const gan = C.ganadores || [];
       C.ganadores = [];
       let siguientes;
@@ -743,8 +755,13 @@
         s.clubs[C.campeon].titulos.copa++;
         continue;
       }
+      /* Red de seguridad: si por lo que sea quedan impares, el sobrante pasa
+       * de arranque en vez de jugar contra nadie y reventar el partido. */
       const nueva = [];
-      for (let i = 0; i < siguientes.length; i += 2) nueva.push([siguientes[i], siguientes[i + 1]]);
+      let cola = siguientes.filter((id) => id != null && s.clubs[id]);
+      if (cola.length % 2) { C.ganadores.push(cola.pop()); }
+      for (let i = 0; i < cola.length; i += 2) nueva.push([cola[i], cola[i + 1]]);
+      if (!nueva.length) { C.campeon = C.ganadores[0]; if (C.campeon != null) s.clubs[C.campeon].titulos.copa++; continue; }
       C.llaves.rondas[C.ronda] = nueva;
     }
   }
@@ -1212,9 +1229,30 @@
     return siguiente(s);
   }
 
+  /* El calendario tiene cuatro semanas de copa y una llave de dieciocho clubes
+   * necesita cinco rondas: sin esto la final nunca se juega y setenta y una de
+   * las setenta y dos copas del mundo se quedan sin campeón todos los años. */
+  function rematarCopas(s, r) {
+    for (let vuelta = 0; vuelta < 12; vuelta++) {
+      let quedan = false;
+      for (const l of D.LEAGUES) {
+        const K = s.comp.copa[l.id];
+        if (!K || K.campeon != null) continue;
+        quedan = true;
+        simRondaCopa(s, r, true);
+        avanzarCopa(s, r);
+        break;
+      }
+      if (!quedan) return;
+    }
+  }
+
   /* ============================================== premios / mercado / sel. */
   function premios(s) {
     const p = yo(s), me = s.me;
+    const { r, done } = rngDe(s);
+    rematarCopas(s, r);
+    done();
     const lineas = [];
     for (const l of D.LEAGUES) {
       if (!s.comp.ligas[l.id]) continue;
@@ -1279,32 +1317,52 @@
     const club = clubDe(s, p);
     const m = media(p);
     const ofertas = [];
-    /* Quién te quiere: clubes cuyo nivel medio esté cerca de tu media + tu ruido. */
-    const interes = m + me.rep * 0.11 + p.form * 1.5 + (p.pot - m) * 0.22 + me.fama * 0.05;
+    /* Quién te quiere: clubes cuyo nivel medio esté cerca de tu media + tu ruido.
+     * El plus por proyección y por nombre está topado: sin tope, un pibe de la
+     * Copa Perú con techo de crack "interesa" a clubes de media 71, y entonces
+     * los únicos clubes a los que puede ir de verdad quedan descartados por
+     * chicos. Esas dos reglas se anulaban y no llegaba una sola oferta. */
+    const plus = clamp(me.rep * 0.11 + (p.pot - m) * 0.22 + me.fama * 0.05, 0, 9);
+    const interes = m + p.form * 1.5 + plus;
     const jugoPoco = p.st.pj < 10;
     for (const c of s.clubs) {
       if (c.id === club.id) continue;
       const nivel = E.mediaObjetivo(c.prestige);
       if (nivel > interes + 4) continue;                     // te queda grande
-      if (nivel < interes - 13) continue;                    // te queda chico
+      if (nivel < interes - 18) continue;                    // te queda chico
       /* Nadie baja tres escalones si viene jugando: solo se retrocede
        * cuando no sumas minutos y necesitas cancha. */
       if (!jugoPoco && c.prestige < club.prestige - 16) continue;
-      /* Nadie salta de la Copa Perú a Europa: se sube de a un escalón. */
-      if (D.LEAGUES.find((l) => l.id === c.leagueId).tier > ligaDe(s, club.id).tier + 1) continue;
-      const prob = clamp(0.10 * me.agente.red * (1 - Math.abs(nivel - interes) / 16), 0.01, 0.55);
+      /* Nadie salta de la Copa Perú a Europa de una: se sube de a dos escalones
+       * como mucho, que es lo que hace un sudamericano que revienta la liga. */
+      if (D.LEAGUES.find((l) => l.id === c.leagueId).tier > ligaDe(s, club.id).tier + 2) continue;
+      /* Los de tu país te vieron jugar; a los de afuera los tiene que convencer
+       * tu representante. Sin esto, a un pibe de la Copa Perú lo fichaba antes
+       * un club serbio que uno peruano, y el arranque perdía todo el sentido. */
+      const mismoPais = ligaDe(s, c.id).pais === ligaDe(s, club.id).pais;
+      /* Y afuera te tienen que conocer: a los 16 en la Copa Perú, en Noruega no
+       * sabe nadie quién eres. El interés del extranjero crece con tu nombre. */
+      const cerca = mismoPais ? 2.2 : clamp((me.rep + me.fama) / 85, 0.1, 1);
+      const prob = clamp(0.10 * me.agente.red * cerca * (1 - Math.abs(nivel - interes) / 16), 0.01, 0.6);
       if (!r.chance(prob)) continue;
       const sueldo = Math.round(wageFor(c, m, p.age) * (0.9 + r.next() * 0.45));
       const rol = nivel > m + 2 ? "rotación" : nivel > m - 4 ? "titular a pelear" : "estrella del equipo";
       const prima = Math.round(sueldo * r.int(6, 30));
+      /* Sin el país, dos ofertas de "Segunda División" pueden ser de Perú y de
+       * Venezuela y no hay forma de saber a cuál te estás yendo. */
+      const paisTxt = mismoPais ? "" : ` (${(D.PAISES.find((x) => x.cod === ligaDe(s, c.id).pais) || {}).nombre || ""})`;
       ofertas.push({
         txt: `${c.name} — ${dinero(sueldo)}/sem, ${r.int(2, 5)} años`,
-        sub: `${D.LEAGUES.find((l) => l.id === c.leagueId).name} · prestigio ${c.prestige} · rol: ${rol} · prima ${dinero(prima)}`,
+        sub: `${D.LEAGUES.find((l) => l.id === c.leagueId).name}${paisTxt} · prestigio ${c.prestige} · rol: ${rol} · prima ${dinero(prima)}`,
         club: c.id, sueldo, anios: r.int(2, 5), prima, rol,
       });
     }
     ofertas.sort((a, b) => s.clubs[b.club].prestige - s.clubs[a.club].prestige);
+    /* Que en la lista siempre entre alguno de tu país si te quiere: los cuatro
+     * clubes de más prestigio suelen ser todos de afuera. */
+    const local = ofertas.find((o) => ligaDe(s, o.club).pais === ligaDe(s, club.id).pais);
     const top = ofertas.slice(0, 4);
+    if (local && !top.includes(local)) top.splice(3, 1, local);
 
     /* Renovación del club actual si te queda poco contrato. */
     const renov = p.years <= 1 ? {
@@ -1321,11 +1379,10 @@
     const opts = top.slice();
     if (renov) opts.push(renov);
     opts.push({ txt: "Quedarme como estoy", quedarse: true, sub: p.years <= 0 ? "Ojo: te quedas sin contrato." : `Te quedan ${p.years} años de contrato.` });
-    /* Solo es un mercado de verdad si hay un salto real o si te quedaste sin
-     * contrato; renovar por renovar no merece detener la carrera corta. */
-    const salto = top.some((o) => s.clubs[o.club].prestige > club.prestige + 5);
+    /* Un mercado con un club de verdad esperándote es la decisión más grande
+     * de la carrera: se muestra siempre. Renovar por renovar, no. */
     s.cola.push({
-      relevante: salto || p.years <= 0,
+      relevante: top.length > 0 || p.years <= 0,
       tipo: "mercado", titulo: "Mercado de pases",
       texto: `Tu valor de mercado: ${dinero(valueOf(p))}. Media ${m}, ${p.age} años.`,
       opts,

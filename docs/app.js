@@ -114,6 +114,9 @@
 
   function pintarTop() {
     const p = C.yo(s), dirige = s.fase === "dt" && s.dt;
+    /* Antes de firmar tu primer contrato no tienes club: el jugador arranca con
+     * clubId 0, que es un club de verdad, y el encabezado decía que jugabas ahí. */
+    const sinClub = !!(s.pendiente && s.pendiente.tipo === "inicio");
     const club = s.clubs[dirige ? s.dt.clubId : p.clubId];
     const L = liga(club.leagueId);
     const t = C.tipoSemana(s);
@@ -121,10 +124,10 @@
       libre: "Semana libre", premios: "Premios", mercado: "Mercado de pases", seleccion: "Selección", vacaciones: "Vacaciones" };
     $("top").innerHTML = `
       <div class="fila">
-        ${camiseta(club)}
+        ${sinClub ? "" : camiseta(club)}
         <div class="quien">
-          <div class="club">${esc(club.name)}</div>
-          <div class="liga">${dirige ? "DT · " : ""}${esc(L ? L.name : "")}</div>
+          <div class="club">${sinClub ? esc(p.name) : esc(club.name)}</div>
+          <div class="liga">${sinClub ? "Sin club todavía" : (dirige ? "DT · " : "") + esc(L ? L.name : "")}</div>
         </div>
         <div class="plata">${dinero(C.patrimonio(s))}</div>
       </div>

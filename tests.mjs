@@ -248,6 +248,56 @@ console.log("\ncarrera: el rendimiento no se desfonda solo");
   ok(ritmos.every((x) => x >= 0.3 && x <= 1.4), `y mete goles a un ritmo creíble (${ritmos.map((x) => x.toFixed(2)).join(", ")})`);
 }
 
+console.log("\ncarrera: el mercado te deja cambiar de club");
+{
+  /* Hubo una versión donde no llegaba una sola oferta en toda la carrera: el
+   * "interés" que despertabas apuntaba a clubes de un nivel al que la regla de
+   * escalones no te dejaba subir, y las dos reglas se anulaban. Terminabas los
+   * treinta años en el club del barrio. */
+  const clubes = [], conOferta = [];
+  for (const seed of [1, 2, 3]) {
+    let mercados = 0, ofrecidos = 0;
+    const { s } = jugar(seed, {
+      modo: "corto",
+      cada: (st, pd) => {
+        if (pd.tipo !== "mercado") return;
+        mercados++;
+        if ((pd.opts || []).some((o) => o.club != null)) ofrecidos++;
+      },
+    });
+    clubes.push(s.pendiente.datos.clubes.length);
+    conOferta.push(mercados ? ofrecidos / mercados : 0);
+  }
+  ok(clubes.every((n) => n >= 3), `una carrera pasa por varios clubes (${clubes.join(", ")})`);
+  ok(conOferta.every((x) => x > 0.5), `y en el mercado casi siempre hay alguien esperándote (${conOferta.map((x) => Math.round(x * 100) + "%").join(", ")})`);
+}
+
+console.log("\ncarrera: todas las copas del mundo terminan");
+{
+  /* El calendario tiene cuatro semanas de copa y una llave de dieciocho clubes
+   * necesita cinco rondas: la final se quedaba sin jugar y setenta y una de las
+   * setenta y dos copas no coronaban campeón nunca. */
+  const cierres = [];
+  jugar(99, {
+    modo: "detallado",
+    cada: (st) => {
+      if (st.semana !== 42 || st.ultCierre === st.temporada) return;
+      st.ultCierre = st.temporada;
+      let con = 0, hay = 0;
+      for (const l of D.LEAGUES) {
+        const K = st.comp.copa[l.id];
+        if (!K) continue;
+        hay++;
+        if (K.campeon != null) con++;
+      }
+      cierres.push({ con, hay });
+    },
+  });
+  ok(cierres.length > 5, `se auditaron varias temporadas (${cierres.length})`);
+  ok(cierres.every((c) => c.con === c.hay),
+     `cada temporada corona campeón en todas las copas (${cierres.map((c) => c.con + "/" + c.hay)[0]}…)`);
+}
+
 console.log("\ncarrera: tablas consistentes durante la temporada");
 {
   const { s } = jugar(777, {

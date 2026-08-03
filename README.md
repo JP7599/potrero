@@ -50,6 +50,12 @@ barrio inventados sobre ciudades reales, distintos en cada carrera. De ahí se
 sube por ascensos —los dos últimos bajan, los dos primeros suben, tu club
 incluido— y por fichajes hacia ligas más fuertes del mundo.
 
+**El mercado te viene a buscar.** Cada pretemporada hay clubes esperándote, y
+la escalera se sube de a poco: primero los de tu propio país, que son los que
+te vieron jugar, y recién cuando tienes nombre empieza a llamarte el exterior.
+Nadie salta de la Copa Perú a Europa de una. Una carrera típica pasa por seis
+o siete clubes y tres o cuatro países.
+
 **Dos formas de empezar.** Firmar en un club de la Copa Perú y jugar desde el
 primer fin de semana en canchas de tierra, o entrar a la cantera de un club de
 Primera: sueldo de mentira y reserva todos los sábados, pero entrenas el doble

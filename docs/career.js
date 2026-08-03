@@ -82,15 +82,19 @@
   function nuevaPartida(opts) {
     const seed = (opts.seed != null ? opts.seed : Math.floor(Math.random() * 1e9)) >>> 0;
     const pais = D.PAISES.some((p) => p.cod === opts.pais) ? opts.pais : "pe";
+    /* "corto": la carrera es el arco, no el calendario. El motor simula las 42
+     * semanas igual, pero solo se detiene en lo que de verdad decide algo.
+     * "detallado" es el juego semana a semana de antes, para quien lo quiera. */
+    const modo = opts.modo === "detallado" ? "detallado" : "corto";
     const w = E.buildWorld(seed);
     const s = {
-      v: 2, seed, pais, rngState: w.rngState, fase: "jugador",
+      v: 2, seed, pais, modo, rngState: w.rngState, fase: "jugador",
       temporada: 1, anio: 2026, semana: 1,
       clubs: w.clubs, players: w.players,
       comp: null, feed: [], cola: [], pendiente: null, partido: null, dt: null,
       me: {
         perfil: opts.perfil || "crack", fama: 2, rep: 8, plata: 1200,
-        estilo: 0, sponsors: [], inv: [], puntos: 0, xp: 0, nivel: 1,
+        estilo: 0, sponsors: [], inv: [], puntos: 0, xp: 0, nivel: 1, enfoque: "tecnica",
         confianza: 52, quimica: 50, prof: 1, idioma: 20, adaptacion: 100,
         dtxp: 0, licencia: 0, agente: { comision: 0.06, red: 1 },
         contrato: { golBonus: 0, pjBonus: 0, clausula: 0 },
@@ -183,6 +187,9 @@
       mercadoIA(s, r);
       for (const c of s.clubs) c.form = 0;
     }
+    s.me.hitosTemporada = 0;
+    s.me.vidaTemporada = 0;
+
     /* Competencias de la temporada. */
     const comp = { ligas: {}, copa: {}, cont: {} };
     for (const l of D.LEAGUES) {
@@ -355,6 +362,87 @@
     E.materializarLiga(s, lid);
     if (s.ligaFoco) E.soltarLiga(s, s.ligaFoco, clubId);
     s.ligaFoco = lid;
+  }
+
+  /* Los partidos que valen una pantalla: el debut, un clásico, una llave de
+   * copa, una final o un duelo directo por el título. El resto se juega solo. */
+  function partidoImportante(s) {
+    const P = s.partido;
+    if (!P || !P.minutos) return false;                        // si no jugaste, no hay jugada
+    if ((s.me.hitosTemporada || 0) >= 2) return false;         // dos por temporada como mucho
+    const p = yo(s), club = clubDe(s, p);
+    if (s.me.carrera.pj <= 1) return true;                     // tu debut
+    const Lm = s.comp.ligas[club.leagueId];
+    /* Piso: ninguna temporada se pasa entera sin que te toque la pelota en una
+     * jugada tuya, aunque el año sea gris y no haya clásicos ni definiciones. */
+    if (!s.me.hitosTemporada && Lm && Lm.fecha >= Lm.fixtures.length * 0.45) return true;
+    if (P.clasico) return true;
+    if (P.t === "cont") {
+      const cid = ligaDe(s, club.id).cont, K = cid && s.comp.cont[cid];
+      if (K && (K.fase === "semis" || K.fase === "final")) return true;
+    }
+    if (P.t === "copa") {
+      const C = s.comp.copa[club.leagueId];
+      if (C && C.ronda >= C.llaves.rondas.length - 1) return true;   // definición de la copa
+    }
+    const L = s.comp.ligas[club.leagueId];
+    if (L && L.fecha >= L.fixtures.length - 2) {               // últimas fechas peleando arriba
+      const tabla = E.sortTable(L.tabla);
+      const mio = tabla.findIndex((x) => x.clubId === club.id);
+      const suyo = tabla.findIndex((x) => x.clubId === P.rival);
+      if (mio >= 0 && mio < 2 && suyo >= 0 && suyo < 4) return true;
+    }
+    return false;
+  }
+
+  /* En modo corto solo se para acá. Todo lo demás se resuelve solo. */
+  const HITOS = new Set(["inicio", "temporada", "retiro", "licencia",
+    "cantera", "momento", "fin", "dt_oferta", "dt_despido", "dt_fin"]);
+
+  function esHito(s, pd) {
+    if (!pd) return true;
+    if (s.modo !== "corto") return true;
+    if (pd.tipo === "mercado") return !!pd.relevante;
+    if (HITOS.has(pd.tipo)) return true;
+    /* La vida fuera de la cancha aparece un par de veces por temporada, no cada
+     * quince días: si te para todo el tiempo deja de ser un acontecimiento. */
+    if (pd.tipo === "decision" || pd.tipo === "sponsor") {
+      if ((s.me.vidaTemporada || 0) >= 1) return false;
+      s.me.vidaTemporada = (s.me.vidaTemporada || 0) + 1;
+      return true;
+    }
+    /* Los premios solo si estuviste peleando algo. */
+    /* Los premios del mundo solo si pisaste el podio: si no, en Copa Perú te
+     * llega la gala del Balón de Oro todos los años. */
+    if (pd.tipo === "premios") {
+      const L = ligaDe(s, yo(s).clubId);
+      return !!(pd.datos && pd.datos.tuPuesto <= 3 && L && L.div === 1);
+    }
+    return false;
+  }
+
+  /* Qué elige el piloto automático en lo que se salta. */
+  function eleccionAutomatica(s, pd) {
+    /* Un mercado que se resuelve solo nunca te cambia de club: renueva si puede
+     * y si no te deja donde estás. Irte es siempre decisión tuya. */
+    if (pd.tipo === "mercado") {
+      const i = pd.opts.findIndex((o) => o.renovar);
+      return i >= 0 ? i : pd.opts.findIndex((o) => o.quedarse);
+    }
+    /* La semana que se resuelve sola tiene que cuidarte como lo harías tú: al
+     * fisio si estás lesionado, a descansar si vienes fundido, y si no, a
+     * entrenar lo que elegiste. Entrenar siempre te deja muerto y con la moral
+     * por el piso, y eso arrastra el rendimiento toda la carrera. */
+    if (pd.tipo === "accion") {
+      const p = yo(s);
+      const quiero = p.inj ? "fisio" : p.fit < 62 ? "descanso" : (s.me.enfoque || "tecnica");
+      const opts = pd.opts || [];
+      const i = opts.findIndex((o) => o.accion === quiero);
+      if (i >= 0) return i;
+      const j = opts.findIndex((o) => o.accion === (s.me.enfoque || "tecnica"));
+      if (j >= 0) return j;
+    }
+    return 0;
   }
 
   function siguiente(s) {
@@ -555,7 +643,7 @@
     p.stRes.pj++; p.stRes.g += ev.gol; p.stRes.a += ev.asi; p.stRes.rat += rating;
     me.carrera.res = me.carrera.res || { pj: 0, g: 0, a: 0 };
     me.carrera.res.pj++; me.carrera.res.g += ev.gol; me.carrera.res.a += ev.asi;
-    p.form = clamp(p.form * 0.62 + (rating - 6.6) * 0.62, -3, 3);
+    p.form = clamp(p.form * 0.62 + (rating - 6.2) * 0.62, -3, 3);
     p.fit = clamp(p.fit - r.int(9, 16), 15, 100);
     /* En la cantera se entrena el doble: es todo el sentido de estar ahí. */
     const w = D.POSITIONS[p.pos].w;
@@ -762,8 +850,11 @@
       const cands = D.MOMENTS.filter((m) => { ctx.min = 55; return m.when(ctx); });
       const elegidos = [];
       const pool = r.shuffle(cands);
-      const n = r.chance(0.45) ? 2 : 1;
+      /* En modo corto solo los partidos que importan te paran, y con una sola
+       * jugada: es lo que hace que una carrera entre en diez minutos. */
+      const n = s.modo === "corto" ? (partidoImportante(s) ? 1 : 0) : (r.chance(0.45) ? 2 : 1);
       for (const m of pool) { if (elegidos.length >= n) break; elegidos.push(m); }
+      if (elegidos.length) s.me.hitosTemporada = (s.me.hitosTemporada || 0) + 1;
       s.partido.momentos = elegidos.map((m) => ({ id: m.id, min: r.int(12, 89) }));
       s.partido.momentos.sort((a, b) => a.min - b.min);
     }
@@ -853,7 +944,7 @@
       me.carrera.a += P.ev.asi; me.carrera.ratSum += rating;
       const mvp = rating >= 8.2;
       if (mvp) { p.st.mvp++; me.carrera.mvp++; }
-      p.form = clamp(p.form * 0.62 + (rating - 6.6) * 0.62, -3, 3);
+      p.form = clamp(p.form * 0.62 + (rating - 6.2) * 0.62, -3, 3);
       p.fit = clamp(p.fit - (P.minutos / 90) * r.int(12, 20), 15, 100);
       me.confianza = clamp(me.confianza + (rating - 6.5) * 3.1 + P.ev.gol * 2.2 - P.ev.roja * 9, 0, 100);
       me.fama = clamp(me.fama + P.ev.gol * 0.7 + (mvp ? 0.6 : 0) + 0.05, 0, 100);
@@ -1041,7 +1132,13 @@
   }
 
   function eventoDeVida(s, r) {
-    const ev = r.pick(D.EVENTOS);
+    /* Que no te ofrezcan el mismo negocio dos veces: la repetición fue lo
+     * primero que mató la gracia de la primera versión. */
+    const vistos = (s.me.vistos = s.me.vistos || []);
+    let pool = D.EVENTOS.filter((e) => !vistos.includes(e.id));
+    if (!pool.length) { vistos.length = 0; pool = D.EVENTOS; }
+    const ev = r.pick(pool);
+    vistos.push(ev.id);
     s.cola.push({
       tipo: "decision", titulo: "Fuera de la cancha", texto: ev.texto, evento: ev.id,
       opts: ev.opts.map((o) => ({ txt: o.txt })),
@@ -1155,15 +1252,23 @@
         + (Object.keys(D.CONTINENTALES).some((cid) => s.comp.cont[cid].campeon === club.id) ? 14 : 0);
       return { q, score };
     }).sort((a, b) => b.score - a.score);
+    /* Solo existen de verdad los jugadores de tu liga: los demás clubes del
+     * mundo son abstractos. Sin un listón, un goleador discreto de una liga
+     * chica levantaría el Balón. Este es el piso de una temporada de crack en
+     * la élite: ~26 goles, ~10 asistencias y media 86 en primera división. */
+    const LISTON = 26 * 1.5 + 10 * 0.9 + 86 * 0.4 + 9 * 5;
     const ganador = cands[0].q;
     const puesto = cands.findIndex((c) => c.q.id === 0) + 1;
-    if (ganador.id === 0) { me.carrera.balones++; me.fama = clamp(me.fama + 18, 0, 100); me.rep = clamp(me.rep + 14, 0, 100); }
+    const meLoGane = ganador.id === 0 && cands[0].score >= LISTON;
+    if (meLoGane) { me.carrera.balones++; me.fama = clamp(me.fama + 18, 0, 100); me.rep = clamp(me.rep + 14, 0, 100); }
     const goleador = s.players.filter(Boolean).sort((a, b) => b.st.g - a.st.g)[0];
 
     s.cola.push({
       tipo: "premios", titulo: `Premios ${s.anio}`,
-      texto: ganador.id === 0 ? "GANASTE EL BALÓN. Eres el mejor jugador del mundo." : `El Balón fue para ${ganador.name} (${s.clubs[ganador.clubId].name}).`,
-      datos: { lineas, balon: ganador.name, goleador: `${goleador.name} — ${goleador.st.g} goles`, tuPuesto: puesto, tus: { ...p.st } },
+      texto: meLoGane ? "GANASTE EL BALÓN. Eres el mejor jugador del mundo."
+        : ganador.id === 0 ? "Fuiste lo mejor de tu liga, pero el Balón se fue a Europa: para eso hace falta otra temporada."
+        : `El Balón fue para ${ganador.name} (${s.clubs[ganador.clubId].name}).`,
+      datos: { lineas, balon: meLoGane ? ganador.name : ganador.id === 0 ? "—" : ganador.name, goleador: `${goleador.name} — ${goleador.st.g} goles`, tuPuesto: puesto, tus: { ...p.st } },
       opts: [{ txt: "Seguir" }],
     });
   }
@@ -1216,7 +1321,11 @@
     const opts = top.slice();
     if (renov) opts.push(renov);
     opts.push({ txt: "Quedarme como estoy", quedarse: true, sub: p.years <= 0 ? "Ojo: te quedas sin contrato." : `Te quedan ${p.years} años de contrato.` });
+    /* Solo es un mercado de verdad si hay un salto real o si te quedaste sin
+     * contrato; renovar por renovar no merece detener la carrera corta. */
+    const salto = top.some((o) => s.clubs[o.club].prestige > club.prestige + 5);
     s.cola.push({
+      relevante: salto || p.years <= 0,
       tipo: "mercado", titulo: "Mercado de pases",
       texto: `Tu valor de mercado: ${dinero(valueOf(p))}. Media ${m}, ${p.age} años.`,
       opts,
@@ -1300,6 +1409,35 @@
       media: media(p), pj: p.st.pj, g: p.st.g, a: p.st.a, mvp: p.st.mvp,
       rat: p.st.pj ? +(p.st.rat / p.st.pj).toFixed(2) : 0, pos, sueldo: p.wage, plata: Math.round(patrimonio(s)),
     });
+    /* La pantalla que cierra el año: es donde la carrera se siente carrera y no
+     * una lista de decisiones sueltas. */
+    const previa = me.hist[me.hist.length - 2];
+    const L = ligaDe(s, p.clubId), club = clubDe(s, p);
+    const campeonLiga = s.clubs[tabla[0].clubId];
+    const cid = L.cont, K = cid && s.comp.cont[cid];
+    s.cola.push({
+      tipo: "temporada",
+      titulo: `Temporada ${s.temporada} · ${s.anio}`,
+      texto: `${p.age} años · ${club.name} · ${L.name}`,
+      datos: {
+        clubId: p.clubId, liga: L.name, pos,
+        pj: p.st.pj, g: p.st.g, a: p.st.a, mvp: p.st.mvp,
+        nota: p.st.pj ? +(p.st.rat / p.st.pj).toFixed(2) : 0,
+        media: media(p), mediaAntes: previa ? previa.media : media(p),
+        edad: p.age, sueldo: p.wage, patrimonio: Math.round(patrimonio(s)),
+        puntos: me.puntos,
+        campeon: campeonLiga.name, campeonId: campeonLiga.id,
+        campeonCont: K && K.campeon != null ? s.clubs[K.campeon].name : null,
+        nombreCont: cid ? D.CONTINENTALES[cid] : null,
+        tuyos: {
+          liga: tabla[0].clubId === p.clubId,
+          copa: s.comp.copa[club.leagueId] && s.comp.copa[club.leagueId].campeon === p.clubId,
+          cont: !!(K && K.campeon === p.clubId),
+        },
+      },
+      opts: [{ txt: "Seguir" }],
+    });
+
     p.years = Math.max(0, p.years - 1);
     if (p.years === 0) feed(s, "Tu contrato se termina. En el próximo mercado hay que decidir.", "info");
     /* ¿Colgamos? */
@@ -1330,6 +1468,7 @@
     club.squad = club.squad.filter((x) => x !== 0);
     p.retirado = true; p.wage = 0;
     const c = me.carrera;
+    c.edadRetiro = p.age;        // la edad de jugador; después el DT sigue envejeciendo
     feed(s, `Te retiraste con ${c.pj} partidos, ${c.g} goles y ${c.titulos.liga + c.titulos.copa + c.titulos.cont} títulos.`, "hito");
     const costo = Math.round(clamp(180000 - me.dtxp * 2200, 25000, 180000));
     s.cola.push({
@@ -1730,6 +1869,7 @@
     return {
       tipo: "fin", titulo: "Tu legado", texto: cierre,
       datos: {
+        nombre: yo(s).name, pos: yo(s).pos, pais: s.pais, edad: c.edadRetiro || yo(s).age,
         pj: c.pj, g: c.g, a: c.a, mvp: c.mvp, balones: c.balones,
         titulos: c.titulos, caps: me.caps, golesSel: me.golesSel,
         patrimonio: Math.round(patrimonio(s)), clubes: c.clubes,
@@ -1780,7 +1920,7 @@
   function setXI(s, ids) { if (s.dt) s.dt.xi = ids.slice(0, 11); }
 
   /* ================================================================ router */
-  function resolver(s, i) {
+  function resolverUno(s, i) {
     const pd = s.pendiente;
     if (!pd) return siguiente(s);
     switch (pd.tipo) {
@@ -1827,6 +1967,7 @@
       case "sponsor": return resolverSponsor(s, i);
       case "mercado": return resolverMercado(s, i);
       case "previa": return siguiente(s);
+      case "temporada": return siguiente(s);
       case "resumen": return siguiente(s);
       case "premios": return siguiente(s);
       case "retiro": {
@@ -1859,10 +2000,20 @@
     }
   }
 
+  /* La carrera se detiene solo en los hitos: todo lo demás se resuelve solo,
+   * en un bucle plano — nada de recursión entre resolver y siguiente. */
+  function resolver(s, i) {
+    let pd = resolverUno(s, i);
+    for (let n = 0; n < 4000 && pd && !esHito(s, pd); n++) {
+      pd = resolverUno(s, eleccionAutomatica(s, pd));
+    }
+    return pd;
+  }
+
   /* ============================================================ save/load */
   function guardar(s) {
     return JSON.stringify({
-      v: s.v, seed: s.seed, pais: s.pais, ligaFoco: s.ligaFoco, rngState: s.rngState, fase: s.fase, temporada: s.temporada,
+      v: s.v, seed: s.seed, pais: s.pais, modo: s.modo, ligaFoco: s.ligaFoco, rngState: s.rngState, fase: s.fase, temporada: s.temporada,
       anio: s.anio, semana: s.semana, clubs: s.clubs, players: s.players, comp: s.comp,
       feed: s.feed.slice(0, 80), cola: s.cola, pendiente: s.pendiente, partido: s.partido,
       dt: s.dt, dtPartido: s.dtPartido, me: s.me,

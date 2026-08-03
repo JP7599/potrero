@@ -17,6 +17,9 @@ const cerca = (a, b, tol) => Math.abs(a - b) <= tol;
 /* Política determinista para jugar carreras enteras en los tests. */
 function jugar(seed, opciones = {}) {
   const s = C.nuevaPartida({ seed, nombre: "Test", pos: opciones.pos || "DC", perfil: opciones.perfil || "crack" });
+  /* Los tests auditan el motor semana a semana: el modo corto salta justo esas
+   * pantallas, así que aquí siempre se juega la carrera larga. */
+  s.modo = opciones.modo || "detallado";
   let i = 0;
   const rnd = (n) => Math.floor(((Math.sin(++i * 12.9898) * 43758.5453) % 1 + 1) % 1 * n);
   let pasos = 0;
@@ -209,6 +212,40 @@ console.log("\ncarrera: la tabla cierra");
      "cada país tiene sus tres categorías");
   ok(D.CLUBS.every((c) => /^#[0-9a-f]{6}$/i.test(c[5]) && /^#[0-9a-f]{6}$/i.test(c[6])),
      "todos los clubes traen los dos colores de su camiseta");
+}
+
+console.log("\ncarrera corta");
+{
+  const largos = [];
+  for (const seed of [5, 55, 555]) {
+    const { s, visto } = jugar(seed, { modo: "corto" });
+    const n = Object.values(visto).reduce((a, b) => a + b, 0);
+    largos.push(n);
+    ok(s.fase === "fin", `la carrera corta con semilla ${seed} llega al final`);
+    ok(!visto.accion && !visto.resumen && !visto.dt_semana,
+       "la carrera corta no muestra semanas de trámite");
+    ok(visto.temporada >= 8 && visto.momento >= 12, `cierre de año en cada temporada y jugadas de sobra (${visto.temporada} / ${visto.momento})`);
+    ok((visto.decision || 0) + (visto.sponsor || 0) <= visto.temporada + 4,
+       "la vida fuera de la cancha no interrumpe más de una vez por temporada");
+  }
+  ok(largos.every((n) => n >= 40 && n <= 130), `una carrera corta cabe en un rato (${largos.join(", ")} pantallas)`);
+}
+
+console.log("\ncarrera: el rendimiento no se desfonda solo");
+{
+  /* El piloto automático del modo corto entrena, descansa y va al fisio como lo
+   * haría un jugador sensato. Si deja de hacerlo, el jugador vive fundido: baja
+   * la nota, la nota baja la forma, y la forma baja la nota otra vez. Este test
+   * existe porque esa espiral ya pasó una vez. */
+  const notas = [], ritmos = [];
+  for (const seed of [20260803, 7, 55]) {
+    const { s } = jugar(seed, { modo: "corto" });
+    const d = s.pendiente.datos;
+    notas.push(d.rating);
+    ritmos.push(d.g / Math.max(1, d.pj));
+  }
+  ok(notas.every((n) => n >= 6 && n <= 8), `un crack promedia una nota de crack (${notas.join(", ")})`);
+  ok(ritmos.every((x) => x >= 0.3 && x <= 1.4), `y mete goles a un ritmo creíble (${ritmos.map((x) => x.toFixed(2)).join(", ")})`);
 }
 
 console.log("\ncarrera: tablas consistentes durante la temporada");

@@ -5,9 +5,9 @@
  * toques. Una pantalla a la vez, la decisión siempre arriba del todo, y la
  * navegación abajo donde llega el pulgar.
  *
- * El ritmo de carrera también vive acá y no en el motor: "saltar" es resolver
- * automáticamente las pantallas que no te interesan, no simular distinto. Así
- * una carrera en Exprés y la misma en Intenso dan exactamente lo mismo. */
+ * El ritmo vive en el motor (s.modo): "saltar" es resolver automáticamente las
+ * pantallas que no te interesan, nunca simular distinto. La misma semilla da la
+ * misma carrera en corto y en completo; solo cambia dónde te detienes. */
 (function () {
   const D = window.PotreroData, E = window.PotreroEngine, C = window.PotreroCareer,
         K = window.PotreroCamisetas;
@@ -44,21 +44,17 @@
 
   /* ---------------------------------------------------------------- ritmo */
   const RITMOS = [
-    ["intenso", "Intenso", "Decides cada semana. El modo largo, con todo el detalle."],
-    ["normal", "Normal", "Se saltan los entrenamientos repetidos y los partidos que no jugaste."],
-    ["expres", "Exprés", "Solo paras en momentos de partido, fichajes y decisiones grandes."],
+    ["corto", "Carrera corta", "Un rato. Te detienes en las jugadas que definen y en el cierre de cada año."],
+    ["detallado", "Carrera completa", "Semana a semana: entrenas, eliges y ves todos los partidos."],
   ];
-  const ritmoActual = () => store.get("potrero.ritmo") || "normal";
+  const ritmoActual = () => (s && s.modo) || "corto";
 
-  /* ¿Esta pantalla merece que el jugador se detenga? */
+  /* ¿Esta pantalla merece que el jugador se detenga? En corto ya decidió el
+   * motor; acá solo se afinan las semanas repetidas de la carrera completa. */
   function paraAca(pd, ritmo) {
-    if (!pd) return true;
-    if (ritmo === "intenso") return true;
+    if (!pd || ritmo === "corto") return true;
     if (pd.tipo === "accion") return false;               // repite la última acción
-    if (pd.tipo === "resumen") {
-      if (ritmo === "expres") return false;
-      return !!(pd.partido && pd.partido.minutos);        // solo los que jugaste
-    }
+    if (pd.tipo === "resumen") return !!(pd.partido && pd.partido.minutos);
     return true;
   }
   /* Qué elige el piloto automático en una pantalla que se salta. */
@@ -73,7 +69,7 @@
   let s = null;
   let tab = "jugar";
   let saltadas = 0;
-  const nuevo = { pais: "pe", pos: "DC", perfil: "crack", ritmo: "normal" };
+  const nuevo = { pais: "pe", pos: "DC", perfil: "crack", ritmo: "corto" };
 
   /* =============================================================== arranque */
   function guardar() { try { store.set(KEY, C.guardar(s)); } catch { /* si no entra, seguimos en memoria */ } }
@@ -90,12 +86,63 @@
   function avanzar() {
     const ritmo = ritmoActual();
     saltadas = 0;
+    if (ritmo === "corto") return;
     for (let n = 0; n < 600; n++) {
       if (!s || !s.pendiente) break;
       if (paraAca(s.pendiente, ritmo)) break;
       C.resolver(s, eleccionAuto(s.pendiente));
       saltadas++;
     }
+  }
+
+  function render() {
+    if (!s) { $("top").hidden = true; $("nav").hidden = true; return pantallaInicio(); }
+    $("top").hidden = false; $("nav").hidden = false;
+    pintarTop();
+    pintarNav();
+    const vistas = { jugar: vistaJugar, equipo: vistaEquipo, tabla: vistaTabla, carrera: vistaCarrera, mas: vistaMas };
+    $("pantalla").innerHTML = (vistas[tab] || vistaJugar)();
+    conectar();
+  }
+
+  /* Los botones se cablean después de pintar: el HTML se arma como texto y
+   * acá se le engancha el comportamiento por data-* */
+  function conectar() {
+    document.querySelectorAll("[data-op]").forEach((b) => { b.onclick = () => paso(+b.dataset.op); });
+    document.querySelectorAll("[data-accion]").forEach((b) => { b.onclick = () => ACCIONES[b.dataset.accion](b); });
+  }
+
+  function pintarTop() {
+    const p = C.yo(s), dirige = s.fase === "dt" && s.dt;
+    const club = s.clubs[dirige ? s.dt.clubId : p.clubId];
+    const L = liga(club.leagueId);
+    const t = C.tipoSemana(s);
+    const NOMBRE = { pretemporada: "Pretemporada", liga: "Fecha de liga", copa: "Copa", cont: "Copa internacional",
+      libre: "Semana libre", premios: "Premios", mercado: "Mercado de pases", seleccion: "Selección", vacaciones: "Vacaciones" };
+    $("top").innerHTML = `
+      <div class="fila">
+        ${camiseta(club)}
+        <div class="quien">
+          <div class="club">${esc(club.name)}</div>
+          <div class="liga">${dirige ? "DT · " : ""}${esc(L ? L.name : "")}</div>
+        </div>
+        <div class="plata">${dinero(C.patrimonio(s))}</div>
+      </div>
+      <div class="barra-temp"><i style="width:${(s.semana / C.SEMANAS) * 100}%"></i></div>
+      <div class="semana">
+        <span>Temporada ${s.temporada} · ${s.anio}</span>
+        <span>${esc(NOMBRE[t] || "")} · sem ${s.semana}/${C.SEMANAS}</span>
+      </div>`;
+  }
+
+  const TABS = [
+    ["jugar", "Jugar", "▶"], ["equipo", "Equipo", "👥"], ["tabla", "Tabla", "☰"],
+    ["carrera", "Carrera", "★"], ["mas", "Más", "⚙"],
+  ];
+  function pintarNav() {
+    $("nav").querySelector(".interior").innerHTML = TABS.map(([k, n, i]) =>
+      `<button data-accion="tab" data-tab="${k}" class="${k === tab ? "on" : ""}">
+        <span class="ico">${i}</span><span>${n}</span></button>`).join("");
   }
 
   /* ---------------------------------------------------------------- inicio */
@@ -136,6 +183,15 @@
       <button class="btn primario" data-accion="empezar">Empezar</button>
       <p class="tenue" style="font-size:12.5px;text-align:center">Se guarda solo en este navegador. Sin cuenta, sin servidor.</p>`;
     conectar();
+    /* La lista está en orden alfabético: sin esto, el país elegido queda fuera
+     * de cuadro y parece que no hay ninguno marcado. */
+    const cont = $("paises"), marcado = cont.querySelector(".pais.on");
+    if (marcado) {
+      /* Por rectángulos y no por offsetTop: la lista no es offsetParent y la
+       * cuenta salía corrida hacia arriba. */
+      const cr = cont.getBoundingClientRect(), mr = marcado.getBoundingClientRect();
+      cont.scrollTop += (mr.top - cr.top) - (cont.clientHeight - mr.height) / 2;
+    }
   }
 
   /* ----------------------------------------------------------------- jugar */
@@ -144,6 +200,7 @@
     if (!pd) return `<div class="card">…</div>`;
     if (pd.tipo === "fin") return vistaFin(pd);
     if (pd.tipo === "previa") return vistaPrevia(pd);
+    if (pd.tipo === "temporada") return vistaTemporada(pd);
 
     let h = "";
     if (saltadas > 3) h += `<p class="tenue" style="font-size:13px;margin:12px 0 0">↓ Se resolvieron ${saltadas} pantallas de trámite.</p>`;
@@ -184,6 +241,34 @@
         <p class="tenue" style="text-align:center;font-size:13.5px;margin:0">${esc(pd.texto)} ${M2.local ? "En tu cancha." : "De visita."}</p>
       </div>
       <button class="btn primario" data-op="0">Salir a la cancha</button>`;
+  }
+
+  /* Cierre de año: la única pantalla que mira hacia atrás. Sin esto la carrera
+   * corta es una lista de decisiones sueltas y no se siente carrera. */
+  function vistaTemporada(pd) {
+    const d = pd.datos, club = s.clubs[d.clubId], dif = d.media - d.mediaAntes;
+    const copas = [];
+    if (d.tuyos.liga) copas.push(`Campeón de ${esc(d.liga)}`);
+    if (d.tuyos.copa) copas.push("Campeón de copa");
+    if (d.tuyos.cont) copas.push(`Campeón de la ${esc(d.nombreCont || "continental")}`);
+
+    const dato = (n, l) => `<div class="dato-gr"><b class="num">${n}</b><span>${l}</span></div>`;
+    let h = `<div class="card">
+      <div class="cab-temp">${camiseta(club, "grande")}
+        <div><h1 style="margin:0">${esc(pd.titulo)}</h1>
+          <p class="tenue" style="font-size:13.5px;margin:2px 0 0">${esc(pd.texto)}</p></div></div>`;
+    if (copas.length) h += `<div class="laurel">${copas.map((c) => `<div>${c}</div>`).join("")}</div>`;
+    h += `<div class="datos-gr">${dato(d.pj, "partidos")}${dato(d.g, "goles")}${dato(d.a, "asist.")}${dato(d.nota || "–", "nota")}</div>
+      <div class="sep"></div>
+      <div class="kv"><span>Tu media</span><b>${d.media}${dif ? ` <span class="delta ${dif > 0 ? "sube" : "baja"}">${dif > 0 ? "+" : ""}${dif}</span>` : ""}</b></div>
+      <div class="kv"><span>Puesto en la tabla</span><b>${d.pos}º</b></div>
+      ${d.tuyos.liga ? "" : `<div class="kv"><span>Campeón</span><b>${esc(d.campeon)}</b></div>`}
+      ${d.campeonCont ? `<div class="kv"><span>${esc(d.nombreCont)}</span><b>${esc(d.campeonCont)}</b></div>` : ""}
+      <div class="kv"><span>Sueldo</span><b>${dinero(d.sueldo)} / semana</b></div>
+      <div class="kv"><span>Patrimonio</span><b>${dinero(d.patrimonio)}</b></div>
+      ${d.puntos ? `<div class="kv"><span>Puntos de talento sin usar</span><b>${d.puntos}</b></div>` : ""}
+    </div>`;
+    return h + `<button class="btn primario" data-op="0">Siguiente temporada</button>`;
   }
 
   function marcadorHTML(pd) {
@@ -232,6 +317,33 @@
       <div class="kv"><span>Tu temporada</span><b>${d.tus.pj} PJ · ${d.tus.g} G · ${d.tus.a} A</b></div>`;
   }
 
+  /* La tarjeta de la carrera en texto plano: lo que uno le manda al grupo del
+   * barrio. Sin imagen, para que se pueda pegar en cualquier chat. */
+  function tarjetaTexto(d) {
+    const t = d.titulos, copas = [];
+    if (t.liga) copas.push(`${t.liga} ${t.liga === 1 ? "liga" : "ligas"}`);
+    if (t.copa) copas.push(`${t.copa} ${t.copa === 1 ? "copa" : "copas"}`);
+    if (t.cont) copas.push(`${t.cont} internacional${t.cont === 1 ? "" : "es"}`);
+    const ruta = d.clubes.length > 4
+      ? [d.clubes[0], "…", ...d.clubes.slice(-2)].join(" → ")
+      : d.clubes.join(" → ");
+    return [
+      `POTRERO · ${d.nombre}`,
+      `${d.pos} · me retiré a los ${d.edad} · ${(D.PAISES.find((x) => x.cod === d.pais) || {}).nombre || ""}`,
+      "",
+      `${d.g} goles y ${d.a} asistencias en ${d.pj} partidos (nota ${d.rating})`,
+      copas.length ? `Títulos: ${copas.join(" · ")}` : "Ni un título, pero jugué todo lo que pude",
+      d.balones ? `${d.balones} ${d.balones === 1 ? "Balón de Oro" : "Balones de Oro"}` : null,
+      d.caps ? `Selección: ${d.caps} partidos, ${d.golesSel} goles` : null,
+      d.dt ? `Después dirigí ${d.dt.temporadas} ${d.dt.temporadas === 1 ? "temporada" : "temporadas"}` +
+        (d.dt.titulos ? ` y gané ${d.dt.titulos}` : " desde el banco") : null,
+      "",
+      ruta,
+      "",
+      "Juega la tuya: jp7599.github.io/potrero",
+    ].filter((x) => x !== null).join("\n");
+  }
+
   function vistaFin(pd) {
     const d = pd.datos;
     return `<div class="card">
@@ -253,6 +365,7 @@
       <div class="sep"></div>
       <p class="tenue" style="font-size:13.5px">Clubes: ${d.clubes.map(esc).join(" · ")}</p>
     </div>
+    <button class="btn" data-accion="compartir">Copiar mi carrera<span class="sub">Para pegarla en el grupo</span></button>
     <button class="btn primario" data-accion="reiniciar">Otra carrera</button>`;
   }
 
@@ -505,11 +618,11 @@
     pos: (b) => { nuevo.pos = b.dataset.pos; pantallaInicio(); },
     perfil: (b) => { nuevo.perfil = b.dataset.perfil; pantallaInicio(); },
     "ritmo-nuevo": (b) => { nuevo.ritmo = b.dataset.ritmo; pantallaInicio(); },
-    ritmo: (b) => { store.set("potrero.ritmo", b.dataset.ritmo); render(); },
+    ritmo: (b) => { s.modo = b.dataset.ritmo; avanzar(); guardar(); render(); },
     empezar: () => {
       const nom = ($("nom").value || "").trim();
-      store.set("potrero.ritmo", nuevo.ritmo);
       s = C.nuevaPartida({ nombre: nom || "Chibolo del Potrero", pos: nuevo.pos, perfil: nuevo.perfil, pais: nuevo.pais });
+      s.modo = nuevo.ritmo;
       tab = "jugar";
       avanzar(); guardar(); render();
     },
@@ -543,6 +656,20 @@
         rd.readAsText(f);
       };
       inp.click();
+    },
+    compartir: async (b) => {
+      const txt = tarjetaTexto(s.pendiente.datos);
+      try { await navigator.clipboard.writeText(txt); }
+      catch {
+        /* Sin permiso de portapapeles (o file://): que al menos se pueda leer. */
+        const ta = document.createElement("textarea");
+        ta.value = txt; ta.style.cssText = "position:fixed;opacity:0";
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); } catch { alert(txt); }
+        ta.remove();
+      }
+      b.firstChild.textContent = "Copiada";
+      setTimeout(() => { b.firstChild.textContent = "Copiar mi carrera"; }, 1800);
     },
     reiniciar: () => {
       if (s && !confirm("¿Empezar otra carrera? La de ahora se borra.")) return;

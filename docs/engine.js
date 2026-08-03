@@ -321,7 +321,7 @@
     const base = m
       + p.form * 1.6
       + (p.mor - 70) * 0.10
-      + (p.fit - 92) * 0.14
+      + (p.fit - 78) * 0.14
       + (ctx.local ? 1.2 : -0.8)
       - (ctx.rivalRating - ctx.equipoRating) * 0.22
       + (ctx.adaptacion != null ? (ctx.adaptacion - 100) * 0.06 : 0);

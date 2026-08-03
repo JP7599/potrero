@@ -82,7 +82,10 @@
     /* Contorno: una versión oscurecida del color dominante, salvo que la
      * camiseta ya sea oscura; así la silueta se recorta sobre cualquier fondo. */
     const base = kit.c1;
-    const borde = lum(base) < 0.22 ? mezcla(base, "#ffffff", 0.28) : mezcla(base, "#000000", 0.42);
+    const L = lum(base);
+    const borde = L < 0.22 ? mezcla(base, "#ffffff", 0.28)
+                : L > 0.78 ? mezcla(base, "#000000", 0.58)   // el kit blanco sobre tarjeta blanca
+                : mezcla(base, "#000000", 0.42);
     const trim = kit.trim || borde;
     const mangas = kit.mangas
       ? `<path d="${MANGA_IZQ}" fill="${kit.mangas}"/><path d="${MANGA_DER}" fill="${kit.mangas}"/>`

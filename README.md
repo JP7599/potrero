@@ -24,12 +24,16 @@ que decidir si pagas el curso de entrenador con lo que juntaste.
 `docs/index.html`. No hay build, no hay servidor, no hay dependencias.
 
 Eliges nombre, país, puesto y perfil (crack de barrio, obrero, cerebro, killer
-del área) y arrancas desde abajo del todo. A partir de ahí cada semana es una
-decisión, y hay 42 semanas por temporada.
+del área) y arrancas desde abajo del todo.
 
-Si el semana a semana te resulta largo, hay tres ritmos —Intenso, Normal y
-Exprés— que cambian **en qué te detienes**, no cómo se simula: la misma carrera
-con la misma semilla da exactamente lo mismo en los tres.
+**Carrera corta** es lo que viene por defecto: unas ochenta pantallas de los 16
+al retiro, más o menos un rato largo de micro. El juego simula las 42 semanas de
+cada temporada igual que siempre, pero solo te detiene donde de verdad decides
+—la jugada que define un partido, un club que te viene a buscar, el cierre de
+cada año— y al final te da una tarjeta para copiar y pegar en el grupo. Si te
+gusta el detalle, **Carrera completa** te devuelve el semana a semana entero.
+Cambian **en qué te detienes**, no cómo se simula: la misma semilla da
+exactamente la misma carrera en los dos.
 
 ## Qué hay adentro
 
@@ -73,22 +77,18 @@ escándalo.
 
 **El partido.** Los minutos no te los regala nadie: dependen de tu media contra
 la de tus compañeros de puesto, de la confianza del técnico y de tu forma. Si
-entras, el partido te para una o dos veces y te hace elegir. Cada opción muestra
-su probabilidad real calculada con tus atributos, y la panenka fallada te va a
-perseguir.
+entras, el partido te para y te hace elegir. Cada opción muestra su probabilidad
+real calculada con tus atributos, y la panenka fallada te va a perseguir.
 
-**Las jugadas las escribe Claude.** Los momentos de partido se generan con la
-API de Anthropic usando lo que está pasando de verdad: el minuto, el marcador,
-el rival, el torneo, tu puesto y cómo vienes en la temporada — más las últimas
-jugadas que ya te salieron, para que no se repitan. La división de trabajo es
-estricta: **el modelo escribe la ficción, el motor se queda con la matemática**.
-Las consecuencias son un enum cerrado (gol, amarilla, lesión, ánimo…) y las
-probabilidades salen de una tabla del juego, no de lo que se le ocurra al
-modelo, así que el balance no depende de la inspiración de nadie.
+En carrera corta esas jugadas no salen en cualquier partido: salen en tu debut,
+en el clásico, en la final, en la fecha que define el título — y si el año viene
+gris y no hubo ninguna, el juego igual te para una vez, porque ninguna temporada
+se pasa entera sin que la pelota sea tuya.
 
-Necesitas tu propia API key: se pega en Más → Momentos con IA y queda en el
-localStorage de tu navegador. No hay servidor de por medio y el costo corre por
-tu cuenta.
+**Sin internet y sin cuenta.** Hubo una versión que le pedía las jugadas a un
+modelo por API. Se sacó: cada momento tardaba entre diez y doce segundos, y una
+semana de carrera se juega en dos. Todo el juego corre en tu navegador, sin key,
+sin costo y sin esperar.
 
 **La plata.** Sueldo semanal escalado al nivel de cada liga (de $50 por semana
 en la Copa Perú a seis cifras en la élite), impuestos según el país, comisión
@@ -100,8 +100,11 @@ meme.
 
 **La carrera.** Creces hacia un potencial que no ves —solo tienes la estimación
 de un ojeador que se equivoca—, te llaman de la selección si rindes, ganas
-títulos, te votan el Balón de Oro o se lo dan a otro, y a partir de los 30 el
-juego te empieza a preguntar si sigues.
+títulos, y a partir de los 30 el juego te empieza a preguntar si sigues. Cada
+año cierra con una pantalla que mira hacia atrás: tus números, dónde terminó tu
+equipo, cuánto subiste de media, qué levantaste. El Balón de Oro existe, pero
+hay que ganárselo en una primera división y con una temporada de crack; desde
+la Copa Perú no te llega ni la invitación.
 
 **El banco.** Cuando te retiras, pagas el curso de entrenador con tu propia
 plata (más barato si te pasaste la carrera viendo video en vez de saliendo).
@@ -125,6 +128,14 @@ en el resultado y que no puedas romper el juego eligiendo siempre lo mismo.
 Todo es determinista a partir de una semilla. Si pones la misma semilla y tomas
 las mismas decisiones, sale exactamente la misma carrera.
 
+Las semanas que la carrera corta resuelve sola no se saltean: se juegan con el
+mismo motor y con las mismas decisiones sensatas que tomarías tú (al fisio si
+estás lesionado, a descansar si vienes fundido, a entrenar si no). Eso importa
+más de lo que parece — cuando el piloto automático entrenaba siempre, el jugador
+llegaba fundido a todos los partidos, bajaba la nota, la nota bajaba la forma y
+la forma bajaba la nota otra vez, hasta dejar a un crack promediando 5.0 y con
+la mitad de los goles que le tocaban.
+
 ## Tests
 
 ```bash
@@ -139,13 +150,11 @@ se rompe, el modo DT queda desbalanceado y pierdes partidos por un bug), que el
 equipo que diriges se mida en la misma escala que el rival, que después de
 treinta temporadas ningún plantel apunte a un jugador que no existe y nadie
 esté en dos clubes a la vez, que retirar un negocio no cree ni destruya
-patrimonio, y que una carrera entera —de los 16 al último banco— se pueda jugar
-de principio a fin sin romperse.
+patrimonio, que una carrera entera —de los 16 al último banco— se pueda jugar de
+principio a fin sin romperse, y que un crack termine con nota de crack y goles
+de crack, para que la espiral de arriba no vuelva a colarse.
 
 ## Notas
-
-Todo lo del juego es inventado: los clubes, las ligas, los nombres, las marcas.
-Cualquier parecido con la realidad es culpa del fútbol.
 
 La partida se guarda sola en el navegador. Como `localStorage` no siempre
 funciona abriendo el archivo directo desde el disco, hay botones de Exportar e
@@ -158,5 +167,10 @@ Los nombres de clubes y ciudades vienen de
 es de acá. `scripts/` tiene los generadores que arman `docs/mundo.js`, por si
 hay que rehacerlo.
 
-MIT. Sin dependencias, sin build, sin assets: siete archivos de JavaScript y un
+Los clubes y los torneos llevan su nombre real, pero acá no hay ni un escudo:
+los escudos son marca registrada de cada club y no se reproducen. Este es un
+proyecto personal sin fines comerciales, sin licencia de nadie y sin relación
+con ninguno de los clubes que aparecen.
+
+MIT. Sin dependencias, sin build, sin assets: seis archivos de JavaScript y un
 HTML.

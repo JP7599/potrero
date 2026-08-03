@@ -141,7 +141,7 @@
     },
     {
       id: "mano_a_mano", peso: 4, when: (c) => c.jugando && ["DC", "EXT", "MCO"].includes(c.pos),
-      texto: (c) => `Te quedas mano a mano con el arquero. ${c.marcadorTxt}.`,
+      texto: (c) => `Te quedas mano a mano con el arquero y ${c.marcadorTxt}.`,
       opts: [
         { txt: "Definir cruzado", key: "tir", base: 0.55, w: 0.4, ok: { gol: 1, mor: 5, conf: 5, txt: "Al segundo palo. Golazo." }, mal: { conf: -3, txt: "Se fue apenas afuera. Te agarraste la cabeza." } },
         { txt: "Amagar y esperar", key: "reg", base: 0.48, w: 0.45, ok: { gol: 1, mor: 7, conf: 6, fama: 1.6, txt: "Lo sentaste y la empujaste. Eso va a los resúmenes." }, mal: { conf: -6, mor: -4, txt: "Te tardaste. Volvió el central y te la sacó." } },

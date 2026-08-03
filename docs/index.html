@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POTRERO — del barrio a la gloria (y después al banco)</title>
+<meta name="description" content="Modo carrera de fútbol: empiezas en la Copa Perú y terminas donde puedas. Sin instalación, sin cuenta, sin internet.">
+<style>
+  /* POTRERO — arcade 16 bits, limpio.
+   *
+   * Nada de texturas ni ruido: bordes duros de 2px, sombras sólidas sin
+   * difuminar, barras partidas en bloques y todo alineado a una grilla de 4px.
+   * Los pixeles de verdad están donde importan: el logo y los escudos, que se
+   * dibujan como SVG en escudos.js. */
+  * { box-sizing: border-box; }
+  :root {
+    --noche: #0b1220;      /* fondo de la cabina */
+    --panel: #141d31;
+    --panel2: #1b2740;
+    --hueco: #0e1626;
+    --linea: #2a3854;
+    --tinta: #060a12;
+    --texto: #e6ecfa;
+    --tenue: #8ea0c2;
+    --verde: #2fe07a;
+    --verde2: #17a854;
+    --amar: #f7e04b;
+    --cian: #4fd8f0;
+    --rojo: #ff5b52;
+    --magenta: #ff5fae;
+    --naranja: #ff9d3c;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --sombra: 4px 4px 0 var(--tinta);
+    --sombra-sm: 3px 3px 0 var(--tinta);
+  }
+  html, body { margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; font-family: var(--ui); color: var(--texto);
+    background-color: var(--noche);
+    /* Rayas de cancha recién cortada, apenas insinuadas. */
+    background-image: repeating-linear-gradient(90deg, rgba(255,255,255,.014) 0 72px, transparent 72px 144px);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+  }
+  .marco { max-width: 1200px; margin: 0 auto; padding: 20px 16px 64px; }
+
+  /* ------------------------------------------------------------- tipografía */
+  .lab, .tab, button, th, .chip, .via {
+    font-family: var(--mono); text-transform: uppercase; letter-spacing: .08em;
+  }
+  .lab { font-size: 10px; color: var(--tenue); display: block; margin-bottom: 6px; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .mini { font-size: 12px; color: var(--tenue); line-height: 1.5; }
+
+  /* --------------------------------------------------------------- cabecera */
+  .top { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+  .logo-svg { height: clamp(38px, 6.5vw, 60px); width: auto; display: block; }
+  .bajada { font-size: 13px; color: var(--tenue); max-width: 360px; margin: 6px 0 0; line-height: 1.5; }
+  .top .der { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* ---------------------------------------------------------------- piezas */
+  .panel {
+    background: var(--panel); border: 2px solid var(--linea);
+    box-shadow: var(--sombra); padding: 14px; margin-bottom: 14px;
+  }
+  .panel > h2 { margin: 0 0 10px; }
+  h2.titulito {
+    font-family: var(--mono); text-transform: uppercase; letter-spacing: .1em;
+    font-size: 11px; color: var(--cian); margin: 0 0 10px;
+  }
+  .sep { height: 2px; background: var(--linea); margin: 14px 0; }
+  .fila { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  button {
+    font-size: 11px; background: var(--panel2); color: var(--texto);
+    border: 2px solid var(--linea); padding: 8px 12px; cursor: pointer;
+    box-shadow: var(--sombra-sm); transition: transform .05s, box-shadow .05s, background .1s;
+  }
+  button:hover { background: #24345a; transform: translate(-1px,-1px); box-shadow: 4px 4px 0 var(--tinta); }
+  button:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 var(--tinta); }
+  button:focus-visible { outline: 2px solid var(--cian); outline-offset: 2px; }
+  button.pri { background: var(--verde2); border-color: var(--verde); color: #eafff2; }
+  button.pri:hover { background: var(--verde); color: var(--tinta); }
+  button.on { background: var(--cian); border-color: var(--cian); color: var(--tinta); }
+  button.chico { font-size: 10px; padding: 5px 8px; box-shadow: 2px 2px 0 var(--tinta); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+
+  input {
+    font-family: var(--mono); font-size: 13px; padding: 9px 10px; width: 100%;
+    background: var(--hueco); color: var(--texto); border: 2px solid var(--linea);
+  }
+  input:focus { outline: none; border-color: var(--cian); }
+
+  /* ----------------------------------------------------------------- inicio */
+  .inicio-grid { display: grid; grid-template-columns: 1fr 1.15fr; gap: 22px; }
+  .pos-sel { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .perfiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+  .perfil {
+    text-align: left; text-transform: none; letter-spacing: 0; font-family: var(--ui);
+    font-size: 12px; line-height: 1.4; padding: 10px; color: var(--tenue);
+  }
+  .perfil b {
+    font-family: var(--mono); text-transform: uppercase; letter-spacing: .06em;
+    font-size: 12px; display: block; margin-bottom: 4px; color: var(--texto);
+  }
+  .perfil.on { background: var(--panel2); border-color: var(--amar); }
+  .perfil.on b { color: var(--amar); }
+
+  /* -------------------------------------------------------------------- hud */
+  .hud {
+    display: flex; align-items: center; gap: 10px 18px; flex-wrap: wrap;
+    background: var(--hueco); border: 2px solid var(--linea); box-shadow: var(--sombra);
+    padding: 10px 14px; margin-bottom: 14px;
+  }
+  .hud .via { font-size: 11px; color: var(--tenue); }
+  .hud .via b { color: var(--texto); }
+  .hud .plata { margin-left: auto; font-family: var(--mono); font-size: 19px; font-weight: 700; color: var(--verde); }
+  .barra-sem { flex-basis: 100%; height: 6px; background: var(--panel2); border: 2px solid var(--linea); }
+  .barra-sem i { display: block; height: 100%; background: var(--cian); }
+
+  /* --------------------------------------------------------------- tablero */
+  .tablero { display: grid; grid-template-columns: 300px 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 940px) {
+    .tablero, .inicio-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 560px) {
+    .grid2 { grid-template-columns: 1fr; }
+  }
+
+  /* ------------------------------------------------------------------ ficha */
+  .ficha { padding: 0; overflow: hidden; }
+  .ficha .cab { display: flex; gap: 12px; align-items: center; padding: 14px; }
+  .escudo { width: 56px; height: 63px; flex: none; image-rendering: pixelated; }
+  .escudo.chico { width: 16px; height: 18px; vertical-align: -4px; margin-right: 6px; }
+  .escudo.med { width: 28px; height: 32px; }
+  .ficha .nom { font-size: 17px; font-weight: 700; line-height: 1.1; }
+  .ficha .apodo { font-size: 12px; color: var(--tenue); font-style: italic; margin-top: 2px; }
+  .ficha .club { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--tenue); margin-top: 5px; }
+  .ficha .med {
+    margin-left: auto; text-align: center; font-family: var(--mono);
+    background: var(--tinta); border: 2px solid var(--linea); padding: 4px 8px;
+  }
+  .ficha .med b { display: block; font-size: 24px; line-height: 1; color: var(--amar); }
+  .ficha .med span { font-size: 8px; letter-spacing: .1em; color: var(--tenue); }
+  .ficha .tira { display: flex; }
+  .ficha .tira i { flex: 1; height: 6px; }
+
+  /* Barras partidas en bloques: el truco de 16 bits que hace que un porcentaje
+   * se lea de un vistazo sin tener que contar números. */
+  .barras { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px 14px; }
+  .barra .lab { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .barra .lab i { font-style: normal; color: var(--texto); }
+  .barra .riel { height: 10px; background: var(--hueco); border: 2px solid var(--linea); padding: 0; }
+  .barra .rel {
+    height: 100%; background: var(--verde);
+    -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 6px);
+    mask-image: repeating-linear-gradient(90deg, #000 0 4px, transparent 4px 6px);
+  }
+  .barra.medio .rel { background: var(--amar); }
+  .barra.mal .rel { background: var(--rojo); }
+
+  /* --------------------------------------------------------------- pantalla */
+  .pantalla {
+    background: var(--panel); border: 2px solid var(--linea); box-shadow: var(--sombra);
+    padding: 0; margin-bottom: 14px;
+  }
+  .pantalla .cinta {
+    background: var(--hueco); border-bottom: 2px solid var(--linea);
+    font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--cian); padding: 7px 14px;
+  }
+  .pantalla .cuerpo { padding: 16px; }
+  .titulo { font-size: clamp(19px, 2.6vw, 26px); line-height: 1.12; margin: 0 0 8px; font-weight: 700; }
+  .texto { font-size: 15px; line-height: 1.55; color: #cfd9ee; margin: 0 0 14px; }
+  .opciones { display: grid; gap: 8px; }
+  /* Las opciones traen desde una probabilidad de tres palabras hasta una frase
+   * entera, así que el texto de apoyo va debajo y con el ancho completo: nada
+   * de columnas que se estrangulan cuando el rival tiene nombre largo. */
+  .opcion {
+    display: block; width: 100%; text-align: left; text-transform: none; letter-spacing: 0;
+    font-family: var(--ui); font-size: 14px; font-weight: 600; line-height: 1.35;
+    padding: 11px 13px; background: var(--panel2); border-color: var(--linea);
+  }
+  .opcion:hover { background: #26375f; border-color: var(--cian); }
+  .opcion .sub {
+    display: block; font-weight: 400; font-size: 12px; line-height: 1.45;
+    color: var(--tenue); margin-top: 4px;
+  }
+  .opcion:hover .sub { color: #b6c6e2; }
+
+  /* -------------------------------------------------------------- marcador */
+  .marcador {
+    display: flex; align-items: center; justify-content: center; gap: 14px;
+    background: var(--tinta); border: 2px solid var(--linea); padding: 14px 10px; margin-bottom: 12px;
+  }
+  .marcador .eq { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; min-width: 0; }
+  .marcador .eq.der { flex-direction: row-reverse; text-align: right; }
+  .marcador .goles { font-family: var(--mono); font-size: 36px; font-weight: 700; line-height: 1; letter-spacing: .04em; }
+  .marcador .goles.gano { color: var(--verde); }
+  .marcador .goles.perdio { color: var(--rojo); }
+  .nota-caja { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .nota {
+    font-family: var(--mono); font-size: 26px; font-weight: 700; line-height: 1;
+    padding: 6px 10px; border: 2px solid var(--linea); background: var(--hueco);
+  }
+  .nota.buena { color: var(--verde); border-color: var(--verde2); }
+  .nota.mala { color: var(--rojo); border-color: var(--rojo); }
+  .chip {
+    display: inline-block; font-size: 10px; padding: 4px 7px; border: 2px solid var(--linea);
+    background: var(--panel2); margin: 2px 4px 2px 0;
+  }
+  .chip.gol { background: var(--verde2); border-color: var(--verde); color: #eafff2; }
+  .chip.asi { background: #1d4f7a; border-color: var(--cian); color: #dff6ff; }
+  .chip.am { background: #6b5a12; border-color: var(--amar); color: #fff6c2; }
+  .chip.roja { background: #7a2320; border-color: var(--rojo); color: #ffe3e1; }
+  .narra {
+    display: flex; gap: 10px; font-size: 14px; line-height: 1.45; color: #cfd9ee;
+    border-left: 3px solid var(--verde); background: var(--hueco); padding: 8px 10px; margin-bottom: 6px;
+  }
+  .narra.mal { border-left-color: var(--rojo); }
+  .narra b { font-family: var(--mono); font-size: 11px; color: var(--tenue); padding-top: 2px; flex: none; }
+
+  /* ------------------------------------------------------------------ tabs */
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .tab { font-size: 10px; padding: 7px 10px; }
+  .tab.on { background: var(--cian); border-color: var(--cian); color: var(--tinta); }
+  #panel { max-height: 620px; overflow: auto; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th {
+    font-size: 9px; color: var(--tenue); text-align: left; padding: 5px 4px;
+    border-bottom: 2px solid var(--linea); font-weight: 400;
+  }
+  td { padding: 5px 4px; border-bottom: 1px solid rgba(255,255,255,.05); }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  tr.yo td { background: rgba(47,224,122,.13); color: var(--verde); font-weight: 700; }
+  tr.sube td:first-child { box-shadow: inset 3px 0 0 var(--verde); }
+  tr.baja td:first-child { box-shadow: inset 3px 0 0 var(--rojo); }
+  tr.sube td:first-child, tr.baja td:first-child { padding-left: 8px; }
+
+  .kv { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
+  .kv b { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--texto); }
+  .kv > span { color: var(--tenue); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+
+  /* ------------------------------------------------------------------ feed */
+  .feed { max-height: 300px; overflow: auto; }
+  .feed .it { display: flex; gap: 9px; font-size: 12.5px; line-height: 1.4; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.05); color: #c3cfe6; }
+  .feed .it .t { font-family: var(--mono); font-size: 9px; color: var(--tenue); white-space: nowrap; padding-top: 3px; }
+  .feed .bueno { color: var(--verde); }
+  .feed .malo { color: var(--rojo); }
+  .feed .hito { color: var(--amar); font-weight: 700; }
+
+  /* -------------------------------------------------------------------- fin */
+  .fin { text-align: center; }
+  .fin .grande {
+    font-family: var(--mono); font-size: clamp(24px, 5vw, 44px); line-height: 1.05;
+    text-transform: uppercase; letter-spacing: .04em; color: var(--amar); margin-bottom: 10px;
+  }
+  .fin .grid2 { text-align: left; }
+</style>
+</head>
+<body>
+<div class="marco">
+  <header class="top">
+    <div>
+      <div id="logo"></div>
+      <p class="bajada">Empiezas a los 16 en la última cancha de la última liga. Terminas donde alcances: crack, millonario, o el técnico que nadie quería.</p>
+    </div>
+    <div class="der" id="acciones-top"></div>
+  </header>
+
+  <section id="inicio" class="panel">
+    <h2 class="titulito">Ficha de inscripción</h2>
+    <div class="inicio-grid">
+      <div>
+        <label class="lab" for="nom">Tu nombre</label>
+        <input id="nom" maxlength="24" placeholder="Ponte un nombre" value="">
+        <div style="height:14px"></div>
+        <span class="lab">Puesto</span>
+        <div class="pos-sel" id="pos-sel"></div>
+        <div style="height:14px"></div>
+        <label class="lab" for="seed">Semilla (déjala vacía y sale una carrera al azar)</label>
+        <input id="seed" placeholder="ej: 1907" inputmode="numeric">
+      </div>
+      <div>
+        <span class="lab">Perfil</span>
+        <div class="perfiles" id="perfiles"></div>
+        <p class="mini" style="margin:12px 0">Tu techo es secreto: lo vas descubriendo entrenando. Dos carreras con el mismo perfil no se parecen en nada.</p>
+        <button id="empezar" class="pri" style="width:100%;font-size:14px;padding:14px">Firmar y empezar</button>
+      </div>
+    </div>
+  </section>
+
+  <main id="juego" hidden>
+    <div class="hud" id="hud"></div>
+    <div class="tablero">
+      <aside>
+        <div class="panel ficha" id="ficha"></div>
+        <div class="panel" id="stats"></div>
+        <div class="panel feed" id="feed"></div>
+      </aside>
+      <section>
+        <div class="pantalla" id="decision"></div>
+        <nav class="tabs" id="tabs"></nav>
+        <div class="panel" id="panel"></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script src="data.js"></script>
+<script src="engine.js"></script>
+<script src="career.js"></script>
+<script src="escudos.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
